@@ -17,6 +17,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+
+    options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

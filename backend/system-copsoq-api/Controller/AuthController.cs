@@ -23,6 +23,42 @@ namespace system_copsoq_api.Controllers
             _tokenService = tokenService;
         }
 
+        [HttpPost("register-staff")]
+    public async Task<IActionResult> RegisterStaff([FromBody] RegistroStaffDto dto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        // --- Validação de Segurança ---
+        // Este endpoint NÃO PODE criar Clientes
+        if (dto.Role == Role.Cliente)
+        {
+            return BadRequest("Use o endpoint /register-cliente para registar clientes.");
+        }
+
+        // (Opcional: Verifique se o email já existe)
+        if (await _context.Usuarios.AnyAsync(u => u.Email == dto.Email))
+        {
+            return Conflict("Este email já está a ser utilizado.");
+        }
+
+        // 1. Criar o novo Usuário (Admin ou Psicologa)
+        var novoUsuario = new User
+        {
+            Email = dto.Email,
+            Role = dto.Role,
+            EmpresaID = null // Staff não tem EmpresaID
+        };
+
+        // 2. Fazer o Hash da senha
+        novoUsuario.SenhaHash = _passwordHasher.HashPassword(novoUsuario, dto.Senha);
+
+        _context.Usuarios.Add(novoUsuario);
+        await _context.SaveChangesAsync(); // Salva o usuário no banco
+
+        return StatusCode(201, new { Message = "Usuário de staff registado com sucesso!" });
+    }
+
         // POST: api/auth/register-cliente
         [HttpPost("register-cliente")]
         public async Task<IActionResult> RegisterCliente([FromBody] RegistroClienteDto dto)
