@@ -1,14 +1,18 @@
+using System.ComponentModel.DataAnnotations;
+using System.Collections.Generic;
+
 namespace system_copsoq_api.Models
 {
     public class Empresa
     {
         public int ID { get; set; }
-        public string NomeEmpresa {get; set;} = string.Empty;
-        public string NomeResponsavel {get; set;} = string.Empty;
-        public String SetorAtuacao {get; set;} = string.Empty;
-        public String Cidade {get; set;} = string.Empty;
-        public String Email {get; set;} = string.Empty;
-        public String Cnpj {get; set;} = string.Empty;
-        public String Senha {get; set;} = string.Empty;
+        public string NomeEmpresa { get; set; } = string.Empty;
+        public string NomeResponsavel { get; set; } = string.Empty;
+        public SetorAtuacao SetorAtuacao { get; set; }
+        public String Cidade { get; set; } = string.Empty;
+        public string Cnpj { get; set; } = string.Empty;
+        public bool IsAtivo { get; set; } = true;
+        public ICollection<User> Usuarios { get; set; } = new List<User>();
+        public ICollection<Funcionario> Funcionarios { get; set; } = new List<Funcionario>();
     }
 }

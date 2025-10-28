@@ -11,8 +11,8 @@ using system_copsoq_api.Data;
 namespace system_copsoq_api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251021003320_AddNomeResponsavelToEmpresa")]
-    partial class AddNomeResponsavelToEmpresa
+    [Migration("20251027191818_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -40,19 +40,11 @@ namespace system_copsoq_api.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("NomeEmpresa")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("NomeResponsavel")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Senha")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -63,6 +55,54 @@ namespace system_copsoq_api.Migrations
                     b.HasKey("ID");
 
                     b.ToTable("Empresas");
+                });
+
+            modelBuilder.Entity("system_copsoq_api.Models.User", b =>
+                {
+                    b.Property<int>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ID"));
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int?>("EmpresaID")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SenhaHash")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("EmpresaID");
+
+                    b.ToTable("Usuarios");
+                });
+
+            modelBuilder.Entity("system_copsoq_api.Models.User", b =>
+                {
+                    b.HasOne("system_copsoq_api.Models.Empresa", "Empresa")
+                        .WithMany("Usuarios")
+                        .HasForeignKey("EmpresaID")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Empresa");
+                });
+
+            modelBuilder.Entity("system_copsoq_api.Models.Empresa", b =>
+                {
+                    b.Navigation("Usuarios");
                 });
 #pragma warning restore 612, 618
         }

@@ -1,0 +1,15 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace system_copsoq_api.DTOs
+{
+
+    public class LoginDto
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [Required]
+        public string Senha { get; set; } = string.Empty;
+    }
+}

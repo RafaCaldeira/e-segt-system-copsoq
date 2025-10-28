@@ -5,24 +5,25 @@
 namespace system_copsoq_api.Migrations
 {
     /// <inheritdoc />
-    public partial class AddNomeResponsavelToEmpresa : Migration
+    public partial class AddIsAtivoToEmpresa : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.RenameColumn(
-                name: "NomeResponsável",
+            migrationBuilder.AddColumn<bool>(
+                name: "IsAtivo",
                 table: "Empresas",
-                newName: "NomeResponsavel");
+                type: "bit",
+                nullable: false,
+                defaultValue: false);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.RenameColumn(
-                name: "NomeResponsavel",
-                table: "Empresas",
-                newName: "NomeResponsável");
+            migrationBuilder.DropColumn(
+                name: "IsAtivo",
+                table: "Empresas");
         }
     }
 }
