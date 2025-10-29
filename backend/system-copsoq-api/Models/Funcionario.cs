@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Collections.Generic;
 using system_copsoq_api.Models;
 
 namespace system_copsoq_api.Models
@@ -25,5 +26,7 @@ namespace system_copsoq_api.Models
         public int EmpresaID { get; set; }
 
         public Empresa Empresa { get; set; } = null!;
+
+        public ICollection<Disparo> Disparos { get; set; } = new List<Disparo>();
     }
 }

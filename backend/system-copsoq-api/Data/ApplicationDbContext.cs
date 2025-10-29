@@ -19,6 +19,9 @@ namespace system_copsoq_api.Data
         public DbSet<Pergunta> Perguntas { get; set; }
         public DbSet<QuestionarioSetorAplicavel> QuestionarioSetoresAplicaveis { get; set; }
 
+        public DbSet<Disparo> Disparos { get; set; }
+        public DbSet<RespostaFuncionario> RespostasFuncionarios { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -82,6 +85,41 @@ namespace system_copsoq_api.Data
             modelBuilder.Entity<QuestionarioSetorAplicavel>()
                 .Property(s => s.Setor)
                 .HasConversion<string>();
+
+            // --- Relações do Disparo ---
+
+            modelBuilder.Entity<Funcionario>()
+                .HasMany(f => f.Disparos)
+                .WithOne(d => d.Funcionario)
+                .HasForeignKey(d => d.FuncionarioID)
+                .OnDelete(DeleteBehavior.Cascade); // Se Funcionario apagado, apaga Disparos
+
+            modelBuilder.Entity<Questionario>()
+                .HasMany<Disparo>() // Questionario tem muitos Disparos (Precisa de ICollection<Disparo> em Questionario.cs)
+                .WithOne(d => d.Questionario) // Disparo tem um Questionario
+                .HasForeignKey(d => d.QuestionarioID)
+                .OnDelete(DeleteBehavior.Restrict);
+
+                // --- Relações da RespostaFuncionario ---
+
+            // Disparo <-> RespostaFuncionario (One-to-Many)
+            modelBuilder.Entity<Disparo>()
+                .HasMany(d => d.Respostas)
+                .WithOne(r => r.Disparo)
+                .HasForeignKey(r => r.DisparoID)
+                .OnDelete(DeleteBehavior.Cascade); // Se Disparo apagado, apaga Respostas
+
+            // Pergunta <-> RespostaFuncionario (One-to-Many)
+            modelBuilder.Entity<Pergunta>()
+                .HasMany(p => p.Respostas)
+                .WithOne(r => r.Pergunta)
+                .HasForeignKey(r => r.PerguntaID)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // --- Índice para o token de acesso único ---
+             modelBuilder.Entity<Disparo>()
+                .HasIndex(d => d.TokenAcesso)
+                .IsUnique();
         }
 
     }
