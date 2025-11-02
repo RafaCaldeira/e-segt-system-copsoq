@@ -10,5 +10,6 @@ namespace system_copsoq_api.DTOs.Responder
         public string TextoIntroducao { get; set; } = string.Empty;
         public string TextoConsentimento { get; set; } = string.Empty;
         public List<DimensaoRespostaDto> Dimensoes { get; set; } = new List<DimensaoRespostaDto>();
+        public FuncionarioSimplesDto Funcionario { get; set; } = null!;
     }
 }

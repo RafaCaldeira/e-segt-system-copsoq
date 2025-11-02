@@ -23,7 +23,7 @@ namespace system_copsoq_api.Controllers
 
         // GET: api/responder/{token}
         [HttpPost("{token}")]
-        public async Task<IActionResult> SubmitRespostas(Guid token, [FromBody] List<RespostaDto> respostasDto)
+        public async Task<IActionResult> SubmitRespostas(Guid token, [FromBody] SubmissaoDto dto)
         {
             if (!ModelState.IsValid)
             {
@@ -32,8 +32,11 @@ namespace system_copsoq_api.Controllers
 
             // 1. Encontrar o Disparo pelo Token
             var disparo = await _context.Disparos
-                .Include(d => d.Questionario) // Precisa do Questionario para validar as perguntas
-                    .ThenInclude(q => q.Perguntas)
+                .Include(d => d.Questionario) 
+                    .ThenInclude(q => q.Dimensoes) 
+                        .ThenInclude(dim => dim.Perguntas) 
+                .Include(d => d.Funcionario) 
+                    .ThenInclude(f => f.Empresa) 
                 .FirstOrDefaultAsync(d => d.TokenAcesso == token);
 
             // 2. Validar o Disparo
@@ -45,10 +48,14 @@ namespace system_copsoq_api.Controllers
             {
                 return BadRequest("Este questionário já foi respondido.");
             }
+            if (disparo.Funcionario == null)
+            {
+                return NotFound("Funcionário associado a este link não foi encontrado.");
+            }
 
             // 3. Validar as Respostas Recebidas
             var idsPerguntasDoQuestionario = disparo.Questionario.Perguntas.Select(p => p.ID).ToList();
-            var idsPerguntasRespondidas = respostasDto.Select(r => r.PerguntaId).ToList();
+            var idsPerguntasRespondidas = dto.Respostas.Select(r => r.PerguntaId).ToList();
 
             // Verifica se todas as perguntas respondidas pertencem a este questionário
             if (idsPerguntasRespondidas.Except(idsPerguntasDoQuestionario).Any())
@@ -56,6 +63,8 @@ namespace system_copsoq_api.Controllers
                 return BadRequest("Uma ou mais respostas são para perguntas que não pertencem a este questionário.");
             }
             
+            disparo.Funcionario.CPF = dto.Cpf;
+
             // (Opcional: Verificar se TODAS as perguntas foram respondidas)
             if (idsPerguntasDoQuestionario.Except(idsPerguntasRespondidas).Any())
             {
@@ -64,7 +73,7 @@ namespace system_copsoq_api.Controllers
             }
 
             // 4. Salvar as Respostas no Banco
-            var novasRespostas = respostasDto.Select(dto => new RespostaFuncionario
+            var novasRespostas = dto.Respostas.Select(dto => new RespostaFuncionario
             {
                 DisparoID = disparo.ID,
                 PerguntaID = dto.PerguntaId,
@@ -91,6 +100,8 @@ namespace system_copsoq_api.Controllers
                 .Include(d => d.Questionario) // Inclui dados do Questionário...
                     .ThenInclude(q => q.Dimensoes) // ...e suas Dimensões...
                         .ThenInclude(dim => dim.Perguntas) // ...e suas Perguntas
+                    .Include(d => d.Funcionario) 
+                        .ThenInclude(f => f.Empresa)
                 .FirstOrDefaultAsync(d => d.TokenAcesso == token);
 
             // 2. Validar o Disparo
@@ -101,6 +112,10 @@ namespace system_copsoq_api.Controllers
             if (disparo.Respondido)
             {
                 return BadRequest("Este questionário já foi respondido.");
+            }
+            if (disparo.Funcionario == null || disparo.Funcionario.Empresa == null)
+            {
+                 return NotFound("Os dados do funcionário ou da empresa não foram encontrados.");
             }
 
             // 3. Montar o DTO de Resposta (para não enviar dados extras)
@@ -123,7 +138,15 @@ namespace system_copsoq_api.Controllers
                                 Id = p.ID,
                                 Texto = p.Texto
                             }).ToList()
-                    }).ToList()
+                    }).ToList(),
+
+                Funcionario = new FuncionarioSimplesDto
+                {
+                    Nome = disparo.Funcionario.Nome,
+                    Setor = disparo.Funcionario.Setor,
+                    CPF = disparo.Funcionario.CPF,
+                    NomeEmpresa = disparo.Funcionario.Empresa.NomeEmpresa
+                }
             };
 
             return Ok(questionarioDto);

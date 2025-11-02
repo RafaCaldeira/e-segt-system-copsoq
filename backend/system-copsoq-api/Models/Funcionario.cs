@@ -22,6 +22,7 @@ namespace system_copsoq_api.Models
 
         [Required(ErrorMessage = "O setor é obrigatório.")]
         public string Setor { get; set; } = string.Empty; // O departamento do funcionário
+        public string CPF { get; set; } = string.Empty;
 
         public int EmpresaID { get; set; }
 

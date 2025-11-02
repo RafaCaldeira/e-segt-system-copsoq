@@ -12,11 +12,18 @@ export interface DimensaoRespostaDto {
   perguntas: PerguntaRespostaDto[];
 }
 
+export interface FuncionarioSimplesDto {
+  nome: string;
+  setor: string;
+  cpf: string;
+  nomeEmpresa: string;
+}
+
 export interface QuestionarioParaResponderDto {
   id: number;
   titulo: string;
   textoIntroducao: string;
   textoConsentimento: string;
-  // O JSON pode vir como { $id: "...", $values: [...] }
   dimensoes: DimensaoRespostaDto[];
+  funcionario: FuncionarioSimplesDto; 
 }

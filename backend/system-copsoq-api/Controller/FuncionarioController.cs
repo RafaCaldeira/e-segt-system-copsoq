@@ -56,6 +56,7 @@ namespace system_copsoq_api.Controllers
                 Telefone = dto.Telefone,
                 Cargo = dto.Cargo,
                 Setor = dto.Setor,
+                CPF = dto.CPF,
                 EmpresaID = user.EmpresaID.Value // 5. Definir o EmpresaID
             };
 
@@ -149,6 +150,7 @@ namespace system_copsoq_api.Controllers
             funcionario.Telefone = dto.Telefone;
             funcionario.Cargo = dto.Cargo;
             funcionario.Setor = dto.Setor;
+            funcionario.CPF = dto.CPF;
 
             await _context.SaveChangesAsync();
             return Ok(funcionario); // Retorna o funcionário atualizado

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("system-copsoq-api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+152e562cb9c27bb7f666e85f9f04c1bfd440101c")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0fdd85eb46672f4e7a5535f6a4f3f422705ca5e5")]
 [assembly: System.Reflection.AssemblyProductAttribute("system-copsoq-api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("system-copsoq-api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

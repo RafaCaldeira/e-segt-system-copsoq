@@ -20,5 +20,8 @@ namespace system_copsoq_api.DTOs
 
         [Required(ErrorMessage = "O setor é obrigatório.")]
         public string Setor { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "O CPF é obrigatório.")]
+        public string CPF { get; set; } = string.Empty;
     }
 }

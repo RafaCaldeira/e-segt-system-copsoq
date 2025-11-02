@@ -103,6 +103,7 @@ namespace system_copsoq_api.Controllers
         {
             // 1. Encontrar o usuário pelo email
             var user = await _context.Usuarios
+                .Include(u => u.Empresa)
                 .FirstOrDefaultAsync(u => u.Email == loginDto.Email);
 
             if (user == null)
