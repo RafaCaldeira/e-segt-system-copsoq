@@ -20,6 +20,7 @@ namespace system_copsoq_api.Controllers
         }
 
         // GET: api/empresa
+        [Authorize(Roles = "Admin")]
         [HttpGet]
         public async Task<IActionResult> GetEmpresas()
         {

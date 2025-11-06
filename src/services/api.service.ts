@@ -4,6 +4,7 @@ import type { LoginSuccessResponse, AuthResponse, RegistroClienteDto } from '../
 import type { SubmissaoDto } from '../types/submissao.types';
 import { useUserStore } from '../store/user';
 import type { Funcionario } from '../types/funcionario.types';
+import type { Empresa } from '../types/empresa.types';
 
 const API_BASE_URL = 'http://localhost:5258/api';
 
@@ -165,6 +166,32 @@ export const apiService = {
 
     } catch (error) {
       console.error('Falha na comunicação com a API ao buscar funcionários:', error);
+      return null;
+    }
+  },
+
+  async getEmpresas(): Promise<Empresa[] | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/empresa`, {
+        method: 'GET',
+        headers: getAuthHeaders() // <-- Usa os cabeçalhos autenticados
+      });
+
+      if (!response.ok) {
+        // Ex: 401 (sem token) ou 403 (não é Admin)
+        console.error(`Erro ao buscar empresas: ${response.status} ${response.statusText}`);
+        return null;
+      }
+
+      const data: Empresa[] = await response.json();
+      const cleanedData = JSON.parse(JSON.stringify(data), (key, value) => {
+        if (value && typeof value === 'object' && value.$values) return value.$values;
+        if (key === '$id' || key === '$ref') return undefined;
+        return value;
+      });
+      return cleanedData as Empresa[];
+    } catch (error) {
+      console.error('Falha na comunicação com a API ao buscar empresas:', error);
       return null;
     }
   }

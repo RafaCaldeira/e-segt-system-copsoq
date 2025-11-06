@@ -3,10 +3,12 @@ import { ref, onMounted, computed } from 'vue';
 import { useUserStore } from '../store/user';
 import { apiService } from '../services/api.service';
 import type { Funcionario } from '../types/funcionario.types';
+import type { Empresa } from '../types/empresa.types'; // <-- Importar Empresa
 import { useRouter } from 'vue-router';
 
-// --- Estado ---
+// Estado
 const funcionarios = ref<Funcionario[] | null>(null);
+const empresas = ref<Empresa[] | null>(null); // <-- Novo estado para Empresas
 const isLoading = ref(true);
 const errorMessage = ref<string | null>(null);
 
@@ -19,50 +21,49 @@ function handleLogout() {
   router.push('/login');
 }
 
-// Computado para mostrar o nome/role na sidebar
 const displayName = computed(() => {
-  // O seu store (user.ts) tem 'Admin', 'Cliente', 'Psicologo'
   if (userStore.userRole === 'Admin') return "Administrador";
   if (userStore.userRole === 'Psicologo') return "Psicólogo";
   if (userStore.isCliente && userStore.nomeEmpresa) {
-    return userStore.nomeEmpresa; // Ex: "Empresa de Teste SA"
+    return userStore.nomeEmpresa;
   }
-  // Fallback se for cliente mas o nome não carregou
-  if (userStore.isCliente) return "Cliente";
+  if (userStore.isCliente) return "Cliente"; 
   return "Menu";
 });
 
 // --- Lógica do Conteúdo Principal (Dashboard) ---
 onMounted(async () => {
-  // Garantir que estamos logados
   if (!userStore.isLoggedIn) {
     errorMessage.value = "Acesso negado. Por favor, faça o login.";
     isLoading.value = false;
-    router.push('/login'); // Redireciona se não estiver logado
+    router.push('/login');
     return;
   }
   
-  // Apenas 'Cliente' ou 'Admin' podem ver esta página por enquanto
-  if (!userStore.isCliente && !userStore.isAdmin) {
-     errorMessage.value = "Você não tem permissão para ver esta página.";
-     isLoading.value = false;
-     return;
-  }
+  isLoading.value = true;
 
-  // Se for Cliente, buscar os seus funcionários
+  // --- LÓGICA ATUALIZADA ---
   if (userStore.isCliente) {
-    isLoading.value = true;
+    // 1. Se for Cliente, buscar os seus funcionários
     const data = await apiService.getFuncionarios();
     if (data) {
       funcionarios.value = data;
     } else {
       errorMessage.value = "Não foi possível carregar os dados dos funcionários.";
     }
-    isLoading.value = false;
-  } else {
-    // Se for Admin, não precisa de carregar funcionários por agora
-    isLoading.value = false;
+  } 
+  else if (userStore.isAdmin) {
+    // 2. Se for Admin, buscar a lista de empresas
+    const data = await apiService.getEmpresas();
+    if (data) {
+      empresas.value = data;
+    } else {
+      errorMessage.value = "Não foi possível carregar a lista de empresas.";
+    }
   }
+  // (Psicologo não carrega nada por enquanto)
+  
+  isLoading.value = false;
 });
 </script>
 
@@ -71,17 +72,16 @@ onMounted(async () => {
     
     <nav class="sidebar">
       <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      
       <ul class="sidebar-nav">
         <li class="user-display">
           <span class="icon"></span> {{ displayName }}
         </li>
-        
         <li><a href="#"><span class="icon"></span> Editar Cadastro</a></li>
         <li><a href="#"><span class="icon"></span> Plano de ação</a></li>
         <li><a href="#"><span class="icon"></span> Relatórios</a></li>
         <li><a href="#"><span class="icon"></span> Baixar Roadmap</a></li>
         <li><a href="#"><span class="icon"></span> Histórico</a></li>
-        
         <li class="logout-item">
           <a @click="handleLogout" href="#">
             <span class="icon icon-logout"></span> Sair
@@ -91,13 +91,11 @@ onMounted(async () => {
     </nav>
 
     <main class="main-content">
-
       <div class="responder-container">
         
         <div v-if="isLoading" class="loading">
           A carregar dados...
         </div>
-
         <div v-else-if="errorMessage" class="error-message">
           {{ errorMessage }}
         </div>
@@ -105,13 +103,43 @@ onMounted(async () => {
         <div v-else>
           
           <div v-if="userStore.isAdmin">
-            <h1 class="content-title">Dashboard do Administrador</h1>
-            <p>Bem-vindo! Use esta área para gerir questionários e clientes.</p>
-            </div>
+            <h1 class="content-title">Empresas Clientes</h1>
+            <p>Abaixo está a lista de todas as empresas clientes ativas.</p>
 
-          <div v-if="userStore.isCliente">
+            <div v-if="!empresas" class="loading">
+              A carregar empresas...
+            </div>
+            <div v-else-if="empresas.length === 0" class="no-data">
+              Nenhuma empresa cliente registada.
+            </div>
+            
+            <table v-else class="funcionarios-tabela"> <thead>
+                <tr>
+                  <th>Nome da Empresa</th>
+                  <th>Responsável</th>
+                  <th>Setor</th>
+                  <th>CNPJ</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="empresa in empresas" :key="empresa.id">
+                  <td>{{ empresa.nomeEmpresa }}</td>
+                  <td>{{ empresa.nomeResponsavel }}</td>
+                  <td>{{ empresa.setorAtuacao }}</td>
+                  <td>{{ empresa.cnpj }}</td>
+                  <td>
+                    <button class="btn-acao">Gerir</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div v-else-if="userStore.isCliente">
             <h1 class="content-title">Meus Funcionários</h1>
             <p>Abaixo está a lista de funcionários registados na sua empresa.</p>
+
             <div v-if="!funcionarios" class="loading">
               A carregar funcionários...
             </div>
@@ -144,31 +172,30 @@ onMounted(async () => {
             </table>
           </div>
           
-          <div v-if="userStore.userRole === 'Psicologo'">
+          <div v-else-if="userStore.userRole === 'Psicologo'">
              <h1 class="content-title">Dashboard do Psicólogo</h1>
              <p>Bem-vindo! Use esta área para aceder aos relatórios de resultados.</p>
           </div>
-
         </div>
+
       </div>
     </main>
   </div>
 </template>
 
 <style scoped>
-/* Copiámos todos os estilos do ResponderQuestionario.vue para manter a consistência */
+/* (O seu CSS existente está ótimo, não precisa de alterações,
+   pois estamos a reutilizar as classes) */
+
 :global(body) {
   margin: 0;
   background-color: #f0f2f5; 
 }
-
 .app-layout {
   display: flex;
   min-height: 100vh;
   font-family: Arial, sans-serif;
 }
-
-/* --- 1. Barra Lateral (Sidebar) --- */
 .sidebar {
   width: 280px;
   flex-shrink: 0;
@@ -191,8 +218,6 @@ onMounted(async () => {
 .sidebar-nav li {
   margin-bottom: 0.5rem;
 }
-
-/* Estilo do item de utilizador (NOVO) */
 .sidebar-nav li.user-display {
   font-size: 1.2rem;
   font-weight: bold;
@@ -203,10 +228,9 @@ onMounted(async () => {
   display: flex;
   align-items: center;
 }
-
 .sidebar-nav a {
-  display: flex; /* <-- CORREÇÃO DE ALINHAMENTO */
-  align-items: center; /* <-- CORREÇÃO DE ALINHAMENTO */
+  display: flex;
+  align-items: center;
   padding: 0.8rem 1rem;
   border-radius: 6px;
   text-decoration: none;
@@ -231,42 +255,35 @@ onMounted(async () => {
   border-radius: 50%;
   flex-shrink: 0;
 }
-/* Item de Sair (NOVO) */
 .sidebar-nav li.logout-item {
-  margin-top: 2rem; /* Espaço antes do Sair */
+  margin-top: 2rem;
 }
 .sidebar-nav li.logout-item a {
-  color: #d9534f; /* Vermelho */
+  color: #d9534f;
   font-weight: bold;
 }
 .sidebar-nav li.logout-item a:hover {
   background-color: #fdf2f2;
 }
-
-/* --- 2. Área de Conteúdo Principal --- */
 .main-content {
   flex: 1;
-  background-color: #333; /* Fundo escuro */
+  background-color: #333;
   padding: 2rem;
   display: flex;
   justify-content: center;
   align-items: flex-start;
   overflow-y: auto;
 }
-
-/* O "Card" */
-.responder-container { /* Reutilizamos o nome do card */
-  max-width: 900px; /* Ajuste se quiser mais largo */
+.responder-container {
+  max-width: 900px;
   width: 100%;
   margin: 0;
   padding: 2.5rem 3rem;
   border-radius: 8px;
-  background-color: #f4f7f6; /* Fundo cinzento claro do card */
+  background-color: #f4f7f6;
   color: #333; 
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
-
-/* Estados de Carregamento/Erro */
 .loading, .error-message, .no-data {
   text-align: center;
   padding: 3rem;
@@ -274,7 +291,6 @@ onMounted(async () => {
   color: #555;
 }
 .error-message { color: #d9534f; }
-
 h1.content-title {
   font-size: 2.2rem;
   color: #333;
@@ -287,8 +303,6 @@ h2 {
   font-size: 1.5rem;
   margin-bottom: 1rem;
 }
-
-/* Estilos da Tabela de Funcionários (Novos) */
 .funcionarios-tabela {
   width: 100%;
   border-collapse: collapse;
