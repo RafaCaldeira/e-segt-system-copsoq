@@ -4,7 +4,7 @@ using system_copsoq_api.Models.Formularios;
 using System.Collections.Generic;
 using system_copsoq_api.Models;
 
-namespace system_copsoq_api.Models
+namespace system_copsoq_api.Models.Disparo
 {
     public class Disparo
     {
@@ -12,11 +12,11 @@ namespace system_copsoq_api.Models
 
         [Required]
         public int QuestionarioID { get; set; }
-        public Questionario Questionario { get; set; } = null!;
+        public Questionario Questionario { get; set; } = null!; // Vem de ...Models.Formularios
 
         [Required]
         public int FuncionarioID { get; set; }
-        public Funcionario Funcionario { get; set; } = null!;
+        public Funcionario Funcionario { get; set; } = null!; // Vem de ...Models
 
         [Required]
         public DateTime DataEnvio { get; set; } = DateTime.UtcNow;
@@ -27,6 +27,7 @@ namespace system_copsoq_api.Models
         public DateTime? DataResposta { get; set; }
         public bool Respondido { get; set; } = false;
 
+        // 'RespostaFuncionario' é encontrado porque está no MESMO namespace
         public ICollection<RespostaFuncionario> Respostas { get; set; } = new List<RespostaFuncionario>();
     }
 }

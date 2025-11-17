@@ -3,25 +3,31 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using system_copsoq_api.Data;
 using system_copsoq_api.DTOs;
-using system_copsoq_api.Models; 
+using system_copsoq_api.Models; // Para Role
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace system_copsoq_api.Controller
+// 1. A CORREÇÃO: Usar um "apelido" (alias)
+// Damos o apelido 'DisparoModel' para a classe 'Disparo' que está no namespace '...Models.Disparo'
+using DisparoModel = system_copsoq_api.Models.Disparo.Disparo;
+
+namespace system_copsoq_api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin")] // <-- Use "Admin" (do seu enum Role.cs)
     public class DisparoController : ControllerBase
     {
-       private readonly AppDbContext _context;
+        private readonly AppDbContext _context;
 
         public DisparoController(AppDbContext context)
         {
             _context = context;
         }
 
+        // POST: api/disparo
         [HttpPost]
         public async Task<IActionResult> CreateDisparos([FromBody] DisparoCreateDto dto)
         {
@@ -35,7 +41,7 @@ namespace system_copsoq_api.Controller
                 return NotFound($"Questionário com ID {dto.QuestionarioID} não encontrado.");
             }
 
-            // 2. Validar se os Funcionários existem e pertencem à mesma empresa
+            // 2. Validar se os Funcionários existem
             var funcionarios = await _context.Funcionarios
                 .Where(f => dto.FuncionarioIDs.Contains(f.ID))
                 .ToListAsync();
@@ -44,31 +50,30 @@ namespace system_copsoq_api.Controller
             {
                 return BadRequest("Um ou mais IDs de funcionário são inválidos.");
             }
-
-            // (Opcional, mas recomendado: Verificar se todos os funcionários são da mesma empresa)
             if (funcionarios.Select(f => f.EmpresaID).Distinct().Count() > 1)
             {
                 return BadRequest("Todos os funcionários selecionados devem pertencer à mesma empresa.");
             }
 
-            // 3. Criar um Disparo para cada Funcionário
-            var novosDisparos = new List<Disparo>();
+            // 3. Criar os Disparos
+            // 2. CORREÇÃO: Usar o apelido na 'List<>'
+            var novosDisparos = new List<DisparoModel>(); 
             foreach (var funcionario in funcionarios)
             {
-                // (Opcional: Verificar se já existe um disparo pendente para este funcionário/questionário)
                 bool jaExistePendente = await _context.Disparos
                     .AnyAsync(d => d.QuestionarioID == dto.QuestionarioID &&
                                    d.FuncionarioID == funcionario.ID &&
                                    !d.Respondido);
                 
-                if (jaExistePendente) continue; // Pula se já foi enviado e não respondido
+                if (jaExistePendente) continue; 
 
-                var novoDisparo = new Disparo
+                // 3. CORREÇÃO: Usar o apelido no 'new'
+                var novoDisparo = new DisparoModel
                 {
                     QuestionarioID = dto.QuestionarioID,
                     FuncionarioID = funcionario.ID,
                     DataEnvio = DateTime.UtcNow,
-                    TokenAcesso = Guid.NewGuid(), // Link único
+                    TokenAcesso = Guid.NewGuid(), 
                     Respondido = false
                 };
                 novosDisparos.Add(novoDisparo);
@@ -79,11 +84,10 @@ namespace system_copsoq_api.Controller
                 return Ok("Nenhum novo disparo necessário (todos já enviados ou funcionários inválidos).");
             }
 
+            // Esta linha agora funciona (corrige o CS1503)
             _context.Disparos.AddRange(novosDisparos);
             await _context.SaveChangesAsync();
-
-            // Retorna os disparos criados (ou apenas uma mensagem de sucesso)
-            // return Ok(novosDisparos); // Retorna os objetos criados
+            
             return Ok(new { Message = $"{novosDisparos.Count} questionário(s) disparado(s) com sucesso." });
         }
     }

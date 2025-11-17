@@ -2,9 +2,9 @@
 import type { QuestionarioParaResponderDto } from '../types/questionario.types';
 import type { LoginSuccessResponse, AuthResponse, RegistroClienteDto } from '../types/auth.types';
 import type { SubmissaoDto } from '../types/submissao.types';
-import { useUserStore } from '../store/user';
 import type { Funcionario } from '../types/funcionario.types';
 import type { Empresa } from '../types/empresa.types';
+import type { RelatorioCompletoDto } from '../types/relatorio.types';
 
 const API_BASE_URL = 'http://localhost:5258/api';
 
@@ -14,7 +14,7 @@ function getAuthHeaders(): HeadersInit {
   if (token) {
     return {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}` // <-- Adiciona o Token Bearer
+      'Authorization': `Bearer ${token}` 
     };
   } else {
     return {
@@ -192,6 +192,35 @@ export const apiService = {
       return cleanedData as Empresa[];
     } catch (error) {
       console.error('Falha na comunicação com a API ao buscar empresas:', error);
+      return null;
+    }
+  },
+  async getRelatorio(empresaId: number, questionarioId: number): Promise<RelatorioCompletoDto | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/relatorio/empresa/${empresaId}/questionario/${questionarioId}`, {
+        method: 'GET',
+        headers: getAuthHeaders() // <-- Usa os cabeçalhos autenticados
+      });
+
+      if (!response.ok) {
+        // Ex: 401, 403, ou 404 (Nenhum respondente)
+        console.error(`Erro ao buscar relatório: ${response.status} ${response.statusText}`);
+        return null;
+      }
+
+      const data: RelatorioCompletoDto = await response.json();
+      
+      // "Limpa" os dados $id e $ref
+      const cleanedData = JSON.parse(JSON.stringify(data), (key, value) => {
+        if (value && typeof value === 'object' && value.$values) return value.$values;
+        if (key === '$id' || key === '$ref') return undefined;
+        return value;
+      });
+
+      return cleanedData as RelatorioCompletoDto;
+
+    } catch (error) {
+      console.error('Falha na comunicação com a API ao buscar relatório:', error);
       return null;
     }
   }

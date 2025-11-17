@@ -5,6 +5,7 @@ export interface LoginSuccessResponse {
     token: string;
     userRole:string;
     nomeEmpresa?: string | null;
+    empresaId?: number | null;
 }
 
 export interface AuthResponse{
@@ -12,6 +13,7 @@ export interface AuthResponse{
     token: string | null;
     userRole:string | null;
     nomeEmpresa?: string | null;
+    empresaId?: number | null;
     error?: string;
 }
 

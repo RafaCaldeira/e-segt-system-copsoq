@@ -22,6 +22,7 @@ namespace system_copsoq_api.Models.Formularios
         // Relações (Um Questionário tem...)
         public ICollection<Dimensao> Dimensoes { get; set; } = new List<Dimensao>();
         public ICollection<Pergunta> Perguntas { get; set; } = new List<Pergunta>();
+        public ICollection<OpcaoResposta> OpcoesResposta { get; set; } = new List<OpcaoResposta>();
         
         // Relação com os Setores (a "Etiqueta")
         public ICollection<QuestionarioSetorAplicavel> SetoresAplicaveis { get; set; } = new List<QuestionarioSetorAplicavel>();

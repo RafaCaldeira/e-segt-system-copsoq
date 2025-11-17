@@ -4,7 +4,9 @@ using system_copsoq_api.Data;
 using system_copsoq_api.DTOs;
 using system_copsoq_api.Models;
 using system_copsoq_api.Services;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore; // <-- Importante para o .Include
+using system_copsoq_api.Models.Disparo; // Para o namespace Disparo
+using system_copsoq_api.Models.Formularios; // Para o namespace Formularios
 
 namespace system_copsoq_api.Controllers
 {
@@ -24,40 +26,41 @@ namespace system_copsoq_api.Controllers
         }
 
         [HttpPost("register-staff")]
-    public async Task<IActionResult> RegisterStaff([FromBody] RegistroStaffDto dto)
-    {
-        if (!ModelState.IsValid)
-            return BadRequest(ModelState);
-
-        // --- Validação de Segurança ---
-        // Este endpoint NÃO PODE criar Clientes
-        if (dto.Role == Role.Cliente)
+        public async Task<IActionResult> RegisterStaff([FromBody] RegistroStaffDto dto)
         {
-            return BadRequest("Use o endpoint /register-cliente para registar clientes.");
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            // Validação de Segurança (para garantir que só Admin ou Psicologo são criados aqui)
+            if (dto.Role == Role.Cliente)
+            {
+                return BadRequest("Use o endpoint /register-cliente para registar clientes.");
+            }
+            // (Verifica se o enum é válido, ex: não é um número fora da gama)
+             if (!Enum.IsDefined(typeof(Role), dto.Role))
+            {
+                return BadRequest("Role inválida.");
+            }
+
+            if (await _context.Usuarios.AnyAsync(u => u.Email == dto.Email))
+            {
+                return Conflict("Este email já está a ser utilizado.");
+            }
+
+            var novoUsuario = new User
+            {
+                Email = dto.Email,
+                Role = dto.Role,
+                EmpresaID = null // Staff não tem EmpresaID
+            };
+
+            novoUsuario.SenhaHash = _passwordHasher.HashPassword(novoUsuario, dto.Senha);
+
+            _context.Usuarios.Add(novoUsuario);
+            await _context.SaveChangesAsync(); 
+
+            return StatusCode(201, new { Message = "Usuário de staff registado com sucesso!" });
         }
-
-        // (Opcional: Verifique se o email já existe)
-        if (await _context.Usuarios.AnyAsync(u => u.Email == dto.Email))
-        {
-            return Conflict("Este email já está a ser utilizado.");
-        }
-
-        // 1. Criar o novo Usuário (Admin ou Psicologa)
-        var novoUsuario = new User
-        {
-            Email = dto.Email,
-            Role = dto.Role,
-            EmpresaID = null // Staff não tem EmpresaID
-        };
-
-        // 2. Fazer o Hash da senha
-        novoUsuario.SenhaHash = _passwordHasher.HashPassword(novoUsuario, dto.Senha);
-
-        _context.Usuarios.Add(novoUsuario);
-        await _context.SaveChangesAsync(); // Salva o usuário no banco
-
-        return StatusCode(201, new { Message = "Usuário de staff registado com sucesso!" });
-    }
 
         // POST: api/auth/register-cliente
         [HttpPost("register-cliente")]
@@ -66,52 +69,55 @@ namespace system_copsoq_api.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            // 1. Criar a Empresa primeiro
+            // (Verifica se o email já existe)
+            if (await _context.Usuarios.AnyAsync(u => u.Email == dto.Email))
+            {
+                return Conflict(new { Message = "Este email já está a ser utilizado."});
+            }
+
             var novaEmpresa = new Empresa
             {
                 NomeEmpresa = dto.NomeEmpresa,
                 NomeResponsavel = dto.NomeResponsavel,
                 SetorAtuacao = dto.SetorAtuacao,
                 Cidade = dto.Cidade,
-                Cnpj = dto.Cnpj
+                Cnpj = dto.Cnpj,
+                IsAtivo = true // Define como ativo por defeito
             };
-
+            
             _context.Empresas.Add(novaEmpresa);
-            // IMPORTANTE: Salvar aqui para que o 'novaEmpresa.ID' seja gerado pelo banco
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(); 
 
-            // 2. Criar o Usuário (o Login)
             var novoUsuario = new User
             {
                 Email = dto.Email,
                 Role = Role.Cliente,
-                EmpresaID = novaEmpresa.ID
+                EmpresaID = novaEmpresa.ID 
             };
 
-            // 3. Fazer o Hash da senha
             novoUsuario.SenhaHash = _passwordHasher.HashPassword(novoUsuario, dto.Senha);
 
             _context.Usuarios.Add(novoUsuario);
-            await _context.SaveChangesAsync(); // Salva o usuário no banco
+            await _context.SaveChangesAsync(); 
 
-            // Retorna '201 Created'
             return StatusCode(201, new { Message = "Cliente registrado com sucesso!" });
         }
         
+        // POST: api/auth/login
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
         {
-            // 1. Encontrar o usuário pelo email
+            // 1. ATUALIZAÇÃO: Usar .Include(u => u.Empresa)
+            // Isto carrega o utilizador E a sua empresa associada (se existir)
             var user = await _context.Usuarios
-                .Include(u => u.Empresa)
+                .Include(u => u.Empresa) // <-- CARREGA A EMPRESA
                 .FirstOrDefaultAsync(u => u.Email == loginDto.Email);
 
             if (user == null)
             {
-                return Unauthorized("Email ou senha inválidos."); // Não diga qual está errado
+                return Unauthorized("Email ou senha inválidos.");
             }
 
-            // 2. Verificar a senha
             var result = _passwordHasher.VerifyHashedPassword(user, user.SenhaHash, loginDto.Senha);
 
             if (result == PasswordVerificationResult.Failed)
@@ -119,14 +125,20 @@ namespace system_copsoq_api.Controllers
                 return Unauthorized("Email ou senha inválidos.");
             }
 
-            // 3. Gerar e retornar o token
             var token = _tokenService.CreateToken(user);
             
+            // 2. ATUALIZAÇÃO: Devolver os novos campos
             return Ok(new 
             {
                 Message = "Login bem-sucedido!",
                 Token = token,
-                UserRole = user.Role.ToString() // Envia a Role para o front-end
+                UserRole = user.Role.ToString(),
+                
+                // Se 'user.Empresa' não for nulo, envia o 'NomeEmpresa'
+                NomeEmpresa = user.Empresa?.NomeEmpresa, 
+                
+                // Adicionamos o EmpresaID à resposta do login
+                EmpresaId = user.EmpresaID 
             });
         }
     }

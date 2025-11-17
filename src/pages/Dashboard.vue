@@ -3,12 +3,12 @@ import { ref, onMounted, computed } from 'vue';
 import { useUserStore } from '../store/user';
 import { apiService } from '../services/api.service';
 import type { Funcionario } from '../types/funcionario.types';
-import type { Empresa } from '../types/empresa.types'; // <-- Importar Empresa
+import type { Empresa } from '../types/empresa.types';
 import { useRouter } from 'vue-router';
 
 // Estado
 const funcionarios = ref<Funcionario[] | null>(null);
-const empresas = ref<Empresa[] | null>(null); // <-- Novo estado para Empresas
+const empresas = ref<Empresa[] | null>(null); 
 const isLoading = ref(true);
 const errorMessage = ref<string | null>(null);
 
@@ -21,13 +21,18 @@ function handleLogout() {
   router.push('/login');
 }
 
+// *** ESTA É A ALTERAÇÃO ***
 const displayName = computed(() => {
   if (userStore.userRole === 'Admin') return "Administrador";
-  if (userStore.userRole === 'Psicologo') return "Psicólogo";
+  if (userStore.userRole === 'Psicologo') return "Psicólogo"; // (Verifique o nome no seu enum Role.cs)
+  
+  // Se for Cliente E tivermos o nome, mostre-o!
   if (userStore.isCliente && userStore.nomeEmpresa) {
-    return userStore.nomeEmpresa;
+    return userStore.nomeEmpresa; // Ex: "Empresa de Teste SA"
   }
+  // Fallback se for cliente mas o nome não carregou
   if (userStore.isCliente) return "Cliente"; 
+
   return "Menu";
 });
 
@@ -42,9 +47,7 @@ onMounted(async () => {
   
   isLoading.value = true;
 
-  // --- LÓGICA ATUALIZADA ---
   if (userStore.isCliente) {
-    // 1. Se for Cliente, buscar os seus funcionários
     const data = await apiService.getFuncionarios();
     if (data) {
       funcionarios.value = data;
@@ -53,7 +56,6 @@ onMounted(async () => {
     }
   } 
   else if (userStore.isAdmin) {
-    // 2. Se for Admin, buscar a lista de empresas
     const data = await apiService.getEmpresas();
     if (data) {
       empresas.value = data;
@@ -61,7 +63,6 @@ onMounted(async () => {
       errorMessage.value = "Não foi possível carregar a lista de empresas.";
     }
   }
-  // (Psicologo não carrega nada por enquanto)
   
   isLoading.value = false;
 });
@@ -70,18 +71,24 @@ onMounted(async () => {
 <template>
   <div class="app-layout">
     
+    <!-- 1. BARRA LATERAL (Sidebar) -->
     <nav class="sidebar">
-      <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      <img src="../assets/logo-e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
       
       <ul class="sidebar-nav">
+        <!-- Item Dinâmico: Mostra o Nome/Role do Utilizador -->
         <li class="user-display">
           <span class="icon"></span> {{ displayName }}
         </li>
+        
+        <!-- Links Estáticos (como no seu esboço) -->
         <li><a href="#"><span class="icon"></span> Editar Cadastro</a></li>
         <li><a href="#"><span class="icon"></span> Plano de ação</a></li>
-        <li><a href="#"><span class="icon"></span> Relatórios</a></li>
+        <li><router-link to="/relatorio"><span class="icon"></span> Relatórios</router-link></li>
         <li><a href="#"><span class="icon"></span> Baixar Roadmap</a></li>
         <li><a href="#"><span class="icon"></span> Histórico</a></li>
+        
+        <!-- Botão de Sair -->
         <li class="logout-item">
           <a @click="handleLogout" href="#">
             <span class="icon icon-logout"></span> Sair
@@ -90,6 +97,7 @@ onMounted(async () => {
       </ul>
     </nav>
 
+    <!-- 2. CONTEÚDO PRINCIPAL (Dashboard) -->
     <main class="main-content">
       <div class="responder-container">
         
@@ -100,20 +108,16 @@ onMounted(async () => {
           {{ errorMessage }}
         </div>
 
+        <!-- CONTEÚDO DO DASHBOARD -->
         <div v-else>
           
+          <!-- Se for Admin: Mostrar Tabela de Empresas -->
           <div v-if="userStore.isAdmin">
             <h1 class="content-title">Empresas Clientes</h1>
             <p>Abaixo está a lista de todas as empresas clientes ativas.</p>
 
-            <div v-if="!empresas" class="loading">
-              A carregar empresas...
-            </div>
-            <div v-else-if="empresas.length === 0" class="no-data">
-              Nenhuma empresa cliente registada.
-            </div>
-            
-            <table v-else class="funcionarios-tabela"> <thead>
+            <table v-if="empresas && empresas.length > 0" class="funcionarios-tabela">
+              <thead>
                 <tr>
                   <th>Nome da Empresa</th>
                   <th>Responsável</th>
@@ -134,20 +138,20 @@ onMounted(async () => {
                 </tr>
               </tbody>
             </table>
+            <div v-else-if="!empresas" class="loading">
+              A carregar empresas...
+            </div>
+            <div v-else class="no-data">
+              Nenhuma empresa cliente registada.
+            </div>
           </div>
 
+          <!-- Se for Cliente: Mostrar Tabela de Funcionários -->
           <div v-else-if="userStore.isCliente">
             <h1 class="content-title">Meus Funcionários</h1>
             <p>Abaixo está a lista de funcionários registados na sua empresa.</p>
 
-            <div v-if="!funcionarios" class="loading">
-              A carregar funcionários...
-            </div>
-            <div v-else-if="funcionarios.length === 0" class="no-data">
-              Nenhum funcionário registado.
-            </div>
-            
-            <table v-else class="funcionarios-tabela">
+            <table v-if="funcionarios && funcionarios.length > 0" class="funcionarios-tabela">
               <thead>
                 <tr>
                   <th>Nome</th>
@@ -170,8 +174,15 @@ onMounted(async () => {
                 </tr>
               </tbody>
             </table>
+            <div v-else-if="!funcionarios" class="loading">
+              A carregar funcionários...
+            </div>
+            <div v-else class="no-data">
+              Nenhum funcionário registado.
+            </div>
           </div>
           
+          <!-- Se for Psicologo -->
           <div v-else-if="userStore.userRole === 'Psicologo'">
              <h1 class="content-title">Dashboard do Psicólogo</h1>
              <p>Bem-vindo! Use esta área para aceder aos relatórios de resultados.</p>
@@ -184,9 +195,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* (O seu CSS existente está ótimo, não precisa de alterações,
-   pois estamos a reutilizar as classes) */
-
+/* (O seu CSS existente) */
 :global(body) {
   margin: 0;
   background-color: #f0f2f5; 
@@ -228,7 +237,8 @@ onMounted(async () => {
   display: flex;
   align-items: center;
 }
-.sidebar-nav a {
+/* Estilo para router-link e a */
+.sidebar-nav a, .sidebar-nav router-link {
   display: flex;
   align-items: center;
   padding: 0.8rem 1rem;
@@ -237,6 +247,7 @@ onMounted(async () => {
   color: #555;
   font-weight: 500;
   transition: background-color 0.2s, color 0.2s;
+  cursor: pointer;
 }
 .sidebar-nav a:hover {
   background-color: #f0f2f5;
