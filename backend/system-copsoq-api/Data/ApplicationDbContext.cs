@@ -1,7 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using system_copsoq_api.Models;
 using system_copsoq_api.Models.Formularios;
-using system_copsoq_api.Models.Disparo; // <-- 1. ADICIONAR ESTE USING
+using system_copsoq_api.Models.Disparo;
+using system_copsoq_api.Models.Planos;
 
 namespace system_copsoq_api.Data
 {
@@ -24,6 +25,10 @@ namespace system_copsoq_api.Data
         // 2. Agora 'Disparo' e 'RespostaFuncionario' são encontrados
         public DbSet<Disparo> Disparos { get; set; }
         public DbSet<RespostaFuncionario> RespostasFuncionarios { get; set; }
+
+         // 3. Agora 'PlanosDeAcao'
+        public DbSet<Acao> Acoes { get; set; }
+        public DbSet<PlanoDeAcao> PlanosDeAcao { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -121,6 +126,23 @@ namespace system_copsoq_api.Data
              modelBuilder.Entity<Disparo>()
                 .HasIndex(d => d.TokenAcesso)
                 .IsUnique();
+
+            modelBuilder.Entity<Empresa>()
+                .HasMany(e => e.PlanosDeAcao)
+                .WithOne(p => p.Empresa)
+                .HasForeignKey(p => p.EmpresaID)
+                .OnDelete(DeleteBehavior.Cascade); 
+
+            // PlanoDeAcao <-> Acao
+            modelBuilder.Entity<PlanoDeAcao>()
+                .HasMany(p => p.Acoes)
+                .WithOne(a => a.PlanoDeAcao)
+                .HasForeignKey(a => a.PlanoDeAcaoID)
+                .OnDelete(DeleteBehavior.Cascade); 
+
+            modelBuilder.Entity<Acao>()
+                .Property(a => a.Status)
+                .HasConversion<string>();
         }
     }
 }

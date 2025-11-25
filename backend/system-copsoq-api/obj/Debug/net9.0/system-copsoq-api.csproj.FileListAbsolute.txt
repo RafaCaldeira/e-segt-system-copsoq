@@ -167,3 +167,4 @@ C:\Users\Rafael Caldeira\system-copsoq\backend\system-copsoq-api\obj\Debug\net9.
 C:\Users\Rafael Caldeira\system-copsoq\backend\system-copsoq-api\obj\Debug\net9.0\system-copsoq-api.pdb
 C:\Users\Rafael Caldeira\system-copsoq\backend\system-copsoq-api\obj\Debug\net9.0\system-copsoq-api.genruntimeconfig.cache
 C:\Users\Rafael Caldeira\system-copsoq\backend\system-copsoq-api\obj\Debug\net9.0\ref\system-copsoq-api.dll
+C:\Users\Rafael Caldeira\system-copsoq\backend\system-copsoq-api\bin\Debug\net9.0\CsvHelper.dll

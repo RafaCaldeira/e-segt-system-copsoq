@@ -8,6 +8,11 @@ using system_copsoq_api.DTOs;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+// NOVOS IMPORTS PARA CSV
+using System.IO;
+using System.Globalization;
+using CsvHelper;
+using CsvHelper.Configuration;
 
 namespace system_copsoq_api.Controllers
 {
@@ -66,6 +71,88 @@ namespace system_copsoq_api.Controllers
 
             // 6. CORREÇÃO: Retornar o 'novoFuncionario'
             return CreatedAtAction(nameof(GetFuncionario), new { id = novoFuncionario.ID }, novoFuncionario);
+        }
+
+
+        [HttpPost("importar")]
+        [Authorize(Roles = "Cliente")] // Só Clientes importam os seus próprios funcionários
+        public async Task<IActionResult> ImportarCsv(IFormFile file)
+        {
+            // 1. Validações Básicas
+            if (file == null || file.Length == 0)
+                return BadRequest("Nenhum ficheiro enviado.");
+
+            if (!file.FileName.EndsWith(".csv"))
+                return BadRequest("O ficheiro deve ser um CSV.");
+
+            // 2. Identificar a Empresa do Cliente
+            var user = await GetUserFromToken();
+            if (user == null || user.EmpresaID == null)
+                return Forbid("Utilizador inválido.");
+
+            var funcionariosCriados = 0;
+            var erros = new List<string>();
+
+            try
+            {
+                // 3. Ler o CSV
+                using (var stream = new StreamReader(file.OpenReadStream()))
+                using (var csv = new CsvReader(stream, new CsvConfiguration(CultureInfo.InvariantCulture)
+                {
+                    Delimiter = ";", // Assumindo que o CSV usa ponto e vírgula (comum no Excel/Brasil)
+                    HasHeaderRecord = true,
+                    MissingFieldFound = null // Ignora colunas em falta (opcional)
+                }))
+                {
+                    // Lê os registos para o DTO
+                    var registros = csv.GetRecords<FuncionarioCsvDto>().ToList();
+
+                    foreach (var item in registros)
+                    {
+                        // (Opcional) Validações extra por linha
+                        if (string.IsNullOrWhiteSpace(item.Nome) || string.IsNullOrWhiteSpace(item.Email))
+                        {
+                            erros.Add($"Linha ignorada (Nome ou Email em falta): {item.Nome}");
+                            continue;
+                        }
+
+                        // Verifica se já existe este email na empresa (evita duplicados)
+                        bool jaExiste = await _context.Funcionarios.AnyAsync(f => f.Email == item.Email && f.EmpresaID == user.EmpresaID);
+                        if (jaExiste)
+                        {
+                            erros.Add($"Email já registado: {item.Email}");
+                            continue;
+                        }
+
+                        var novoFunc = new Funcionario
+                        {
+                            Nome = item.Nome,
+                            Email = item.Email,
+                            Telefone = item.Telefone,
+                            Cargo = item.Cargo,
+                            Setor = item.Setor,
+                            CPF = item.CPF,
+                            EmpresaID = user.EmpresaID.Value
+                        };
+
+                        _context.Funcionarios.Add(novoFunc);
+                        funcionariosCriados++;
+                    }
+                    
+                    // Salva tudo de uma vez no final
+                    await _context.SaveChangesAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                return BadRequest($"Erro ao processar o ficheiro: {ex.Message}. Verifique se o formato está correto (separador ';').");
+            }
+
+            return Ok(new 
+            { 
+                Message = $"{funcionariosCriados} funcionários importados com sucesso.", 
+                Erros = erros 
+            });
         }
 
         // GET: api/funcionario

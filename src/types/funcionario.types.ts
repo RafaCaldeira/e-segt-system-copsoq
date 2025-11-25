@@ -8,4 +8,14 @@ export interface Funcionario {
   cargo: string;
   setor: string;
   empresaID: number;
+  cpf?: string;
+}
+
+export interface FuncionarioCreateDto {
+  nome: string;
+  email: string;
+  telefone: string;
+  cargo: string;
+  setor: string;
+  cpf: string;
 }
