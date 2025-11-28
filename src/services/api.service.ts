@@ -7,6 +7,8 @@ import type { RelatorioCompletoDto } from '../types/relatorio.types';
 // IMPORTE OS NOVOS TIPOS
 import type { PlanoDeAcao, PlanoDeAcaoCreateDto, AcaoCreateDto, Acao } from '../types/plano.types';
 import type { OpcaoRespostaCreateDto } from '../types/questionario.types';
+import type { DisparoCreateDto } from '../types/disparo.types';
+import type { Questionario } from '../types/questionario.types';
 
 
 
@@ -359,6 +361,53 @@ async getFuncionarioById(id: number): Promise<Funcionario | null> {
   }
 },
 
+async getQuestionarios(): Promise<Questionario[] | null> {
+    try {
+      // Assumindo que você tem um endpoint GET /api/questionario que lista todos
+      const response = await fetch(`${API_BASE_URL}/questionario`, {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      // Limpeza básica de $values se necessário
+      return JSON.parse(JSON.stringify(data), (_key, v) => {
+         if (v && v.$values) return v.$values;
+         return v;
+      }) as Questionario[];
+    } catch (error) { return null; }
+},
 
+  // 2. Buscar Funcionários de uma Empresa específica (Para o Admin)
+  // (Se o seu backend GetFuncionarios já retorna TUDO para o admin, podemos filtrar no front,
+  // mas o ideal seria um endpoint /api/funcionario/empresa/{id})
+async getFuncionariosPorEmpresaId(empresaId: number): Promise<Funcionario[] | null> {
+    try {
+      // Nota: Se este endpoint não existir no backend, teremos de usar o getFuncionarios()
+      // e filtrar no JavaScript. Vou assumir que filtramos no front por enquanto.
+      const allFuncs = await this.getFuncionarios(); 
+      if (!allFuncs) return null;
+      return allFuncs.filter(f => f.empresaID === empresaId);
+    } catch (error) { return null; }
+},
+// 3. Disparar (Enviar)
+  async createDisparo(dto: DisparoCreateDto): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/disparo`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(dto)
+      });
+      
+      const data = await response.json();
+      if (response.ok) {
+        return { success: true, message: data.message || 'Enviado com sucesso!' };
+      } else {
+        return { success: false, message: data.title || 'Erro ao enviar.' };
+      }
+    } catch (error) {
+      return { success: false, message: 'Falha de rede.' };
+    }
+  }
 
 };

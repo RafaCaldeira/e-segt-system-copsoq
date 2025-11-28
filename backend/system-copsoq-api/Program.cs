@@ -41,6 +41,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddTransient<IEmailService, EmailService>();
 
 builder.Services.AddCors(options =>
 {

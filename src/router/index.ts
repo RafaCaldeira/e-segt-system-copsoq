@@ -10,6 +10,8 @@ import CriarQuestionario from '../pages/CriarQuestionario.vue';
 import Funcionario from '../pages/Funcionario.vue';
 import NovoFuncionario from "../pages/NovoFuncionario.vue";
 import EditarFuncionario from "../pages/EditarFuncionario.vue";
+import Disparo from "../pages/DispararQuestionario.vue";
+import Historico from '../pages/Historico.vue';
 
 
 const routes = [
@@ -21,6 +23,8 @@ const routes = [
   { path: '/funcionario', name: 'Funcionarios', component: Funcionario },
   { path: '/novo-funcionario', name: 'NovoFuncionario', component: NovoFuncionario },
   { path: '/editarFuncionario/:id',name: 'EditarFuncionario',component: EditarFuncionario,props: true},
+  {path: '/disparo', name: 'Disparo', component: Disparo},
+  { path: '/historico', name: 'Historico', component: Historico },
 
   // 👉 Nova rota adicionada
   { path: '/criar-questionario', name: 'CriarQuestionario', component: CriarQuestionario },

@@ -168,5 +168,15 @@ namespace system_copsoq_api.Controllers
 
             return Ok(dimensao);
         }
+
+        [HttpGet]
+        public async Task<IActionResult> GetQuestionarios()
+        {
+            var questionarios = await _context.Questionarios
+                .Include(q => q.SetoresAplicaveis) // Importante: Incluir os setores!
+                .ToListAsync();
+
+            return Ok(questionarios);
+        }
     }
 }
