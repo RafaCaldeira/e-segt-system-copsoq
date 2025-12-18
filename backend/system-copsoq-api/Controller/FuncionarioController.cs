@@ -169,5 +169,60 @@ namespace system_copsoq_api.Controllers
             if (userEmail == null) return null;
             return await _context.Usuarios.FirstOrDefaultAsync(u => u.Email == userEmail);
         }
+
+        [HttpGet("empresa/{empresaId}/status")]
+        [Authorize(Roles = "Psicologo")]
+        public async Task<IActionResult> GetFuncionariosComStatus(int empresaId)
+        {
+            var funcionarios = await _context.Funcionarios
+                .Where(f => f.EmpresaID == empresaId)
+                .Select(f => new {
+                    Id = f.ID,
+                    NomeCompleto = f.Nome,
+                    Email = f.Email,
+                    
+                    JaRespondeu = _context.RespostasFuncionarios
+                    .Any(r => r.Disparo.FuncionarioID == f.ID)
+                })
+                .ToListAsync();
+
+            return Ok(funcionarios);
+        }
+
+        [Authorize(Roles = "Psicologo,Admin")]
+        [HttpGet("empresa/{empresaId}/funcionarios")]
+        public async Task<IActionResult> GetFuncionariosPorEmpresa(int empresaId)
+        {
+            var funcionarios = await _context.Funcionarios
+                .Where(f => f.EmpresaID == empresaId)
+                .Select(f => new {
+                    Id = f.ID,
+                    Nome = f.Nome,
+                    Email = f.Email,
+                    JaRespondeu = _context.RespostasFuncionarios
+                        .Any(r => r.Disparo.FuncionarioID == f.ID)
+                })
+                .ToListAsync();
+
+            return Ok(funcionarios);
+        }
+
+        [Authorize(Roles = "Psicologo,Admin")]
+        [HttpGet("funcionario/{funcionarioId}/disparos")]
+        public async Task<IActionResult> GetDisparosDoFuncionario(int funcionarioId)
+        {
+            var disparos = await _context.Disparos
+                .Where(d => d.FuncionarioID == funcionarioId)
+                .Select(d => new {
+                    d.ID,
+                    d.DataEnvio,
+                    d.DataResposta,
+                    d.Respondido,
+                    Questionario = d.Questionario.Titulo
+                })
+                .ToListAsync();
+
+            return Ok(disparos);
+        }
     }
 }

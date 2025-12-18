@@ -5,6 +5,8 @@ import { apiService } from '../services/api.service';
 import type { Funcionario } from '../types/funcionario.types';
 import type { Empresa } from '../types/empresa.types';
 import { useRouter } from 'vue-router';
+// 1. IMPORTAR O FOOTER
+import AppFooter from '../components/AppFooter.vue';
 
 // Estado
 const funcionarios = ref<Funcionario[] | null>(null);
@@ -21,20 +23,26 @@ function handleLogout() {
   router.push('/login');
 }
 
-// *** ESTA É A ALTERAÇÃO ***
+// Computa o nome/cargo para exibir no topo do menu
 const displayName = computed(() => {
   if (userStore.userRole === 'Admin') return "Administrador";
-  if (userStore.userRole === 'Psicologo') return "Psicólogo"; // (Verifique o nome no seu enum Role.cs)
+  if (userStore.userRole === 'Psicologo') return "Psicólogo";
   
-  // Se for Cliente E tivermos o nome, mostre-o!
   if (userStore.isCliente && userStore.nomeEmpresa) {
-    return userStore.nomeEmpresa; // Ex: "Empresa de Teste SA"
+    return userStore.nomeEmpresa; 
   }
-  // Fallback se for cliente mas o nome não carregou
   if (userStore.isCliente) return "Cliente"; 
 
   return "Menu";
 });
+
+// --- NOVA FUNÇÃO: Gerir Empresa ---
+function gerirEmpresa(empresaId: number) {
+  router.push({ 
+    path: '/historico', 
+    query: { empresaId: empresaId.toString() } 
+  });
+}
 
 // --- Lógica do Conteúdo Principal (Dashboard) ---
 onMounted(async () => {
@@ -47,301 +55,384 @@ onMounted(async () => {
   
   isLoading.value = true;
 
-  if (userStore.isCliente) {
-    const data = await apiService.getFuncionarios();
-    if (data) {
-      funcionarios.value = data;
-    } else {
-      errorMessage.value = "Não foi possível carregar os dados dos funcionários.";
+  try {
+    if (userStore.isCliente) {
+      const data = await apiService.getFuncionarios();
+      funcionarios.value = data || [];
+    } 
+    else if (userStore.isAdmin) {
+      const data = await apiService.getEmpresas();
+      empresas.value = data || [];
+    } else if (userStore.isAdmin || userStore.userRole === 'Psicologo') {
+      const data = await apiService.getEmpresasParaPsicologo(); 
+      empresas.value = data || [];
     }
-  } 
-  else if (userStore.isAdmin) {
-    const data = await apiService.getEmpresas();
-    if (data) {
-      empresas.value = data;
-    } else {
-      errorMessage.value = "Não foi possível carregar a lista de empresas.";
-    }
+  } catch (error) {
+    errorMessage.value = "Erro ao carregar dados.";
+  } finally {
+    isLoading.value = false;
   }
-  
-  isLoading.value = false;
 });
 </script>
 
 <template>
   <div class="app-layout">
     
-    <!-- 1. BARRA LATERAL (Sidebar) -->
     <nav class="sidebar">
-      <img src="../assets/logo-e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      <div class="logo-area">
+        <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      </div>
+      
+      <div class="user-badge">{{ displayName }}</div>
       
       <ul class="sidebar-nav">
-        <!-- Item Dinâmico: Mostra o Nome/Role do Utilizador -->
-        <li class="user-display">
-          <span class="icon"></span> {{ displayName }}
+        
+        <li v-if="userStore.userRole === 'Psicologo'">
+            <router-link to="/psicologo"><span class="icon">🧠</span> Área do Psicólogo</router-link>
+        </li>
+
+        <li v-if="userStore.isAdmin">
+          <router-link to="/criar-questionario">
+            <span class="icon">📝</span> Criar Questionário
+          </router-link>
+        </li>
+        <li v-if="userStore.isAdmin">
+          <router-link to="/disparo">
+            <span class="icon">📨</span> Enviar Questionário
+          </router-link>
+        </li>
+
+        <li v-if="userStore.isCliente">
+            <router-link to="/editar-cadastro">
+                <span class="icon">⚙️</span> Editar Cadastro
+            </router-link>
+        </li>
+        <li v-if="userStore.isCliente">
+            <router-link to="/funcionario">
+                <span class="icon">👥</span> Funcionários
+            </router-link>
+        </li>
+
+        <li>
+          <router-link to="/plano-de-acao">
+            <span class="icon">📋</span> Plano de Ação
+          </router-link>
+        </li>
+
+        <li>
+          <router-link to="/relatorio">
+            <span class="icon">📊</span> Relatório
+          </router-link>
+        </li>
+
+        <li>
+          <router-link to="/historico">
+            <span class="icon">📜</span> Histórico
+          </router-link>
         </li>
         
-        <!-- Links Estáticos (como no seu esboço) -->
-        <li><a href="#"><span class="icon"></span> Editar Cadastro</a></li>
-        <li><a href="#"><span class="icon"></span> Plano de ação</a></li>
-        <li><router-link to="/relatorio"><span class="icon"></span> Relatórios</router-link></li>
-        <li><a href="#"><span class="icon"></span> Baixar Roadmap</a></li>
-        <li><a href="#"><span class="icon"></span> Histórico</a></li>
-        
-        <!-- Botão de Sair -->
         <li class="logout-item">
-          <a @click="handleLogout" href="#">
-            <span class="icon icon-logout"></span> Sair
+          <a @click.prevent="handleLogout" href="#">
+            <span class="icon">🚪</span> Sair
           </a>
         </li>
       </ul>
     </nav>
 
-    <!-- 2. CONTEÚDO PRINCIPAL (Dashboard) -->
-    <main class="main-content">
-      <div class="responder-container">
-        
-        <div v-if="isLoading" class="loading">
-          A carregar dados...
-        </div>
-        <div v-else-if="errorMessage" class="error-message">
-          {{ errorMessage }}
-        </div>
-
-        <!-- CONTEÚDO DO DASHBOARD -->
-        <div v-else>
+    <div class="main-wrapper">
+      <main class="main-content">
+        <div class="responder-container">
           
-          <!-- Se for Admin: Mostrar Tabela de Empresas -->
-          <div v-if="userStore.isAdmin">
-            <h1 class="content-title">Empresas Clientes</h1>
-            <p>Abaixo está a lista de todas as empresas clientes ativas.</p>
-
-            <table v-if="empresas && empresas.length > 0" class="funcionarios-tabela">
-              <thead>
-                <tr>
-                  <th>Nome da Empresa</th>
-                  <th>Responsável</th>
-                  <th>Setor</th>
-                  <th>CNPJ</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="empresa in empresas" :key="empresa.id">
-                  <td>{{ empresa.nomeEmpresa }}</td>
-                  <td>{{ empresa.nomeResponsavel }}</td>
-                  <td>{{ empresa.setorAtuacao }}</td>
-                  <td>{{ empresa.cnpj }}</td>
-                  <td>
-                    <button class="btn-acao">Gerir</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else-if="!empresas" class="loading">
-              A carregar empresas...
-            </div>
-            <div v-else class="no-data">
-              Nenhuma empresa cliente registada.
-            </div>
+          <div v-if="isLoading" class="loading">
+            <span class="loader"></span> Carregando dados...
+          </div>
+          <div v-else-if="errorMessage" class="error-message">
+            {{ errorMessage }}
           </div>
 
-          <!-- Se for Cliente: Mostrar Tabela de Funcionários -->
-          <div v-else-if="userStore.isCliente">
-            <h1 class="content-title">Meus Funcionários</h1>
-            <p>Abaixo está a lista de funcionários registados na sua empresa.</p>
+          <div v-else>
+            
+            <div v-if="userStore.isAdmin || userStore.userRole === 'Psicologo'">
+              <header class="page-header">
+                <h1 class="content-title">Empresas Clientes</h1>
+                </header>
+              
+              <p class="description">Gerencie as empresas ativas. Clique na empresa para ver detalhes.</p>
 
-            <table v-if="funcionarios && funcionarios.length > 0" class="funcionarios-tabela">
-              <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th>Email</th>
-                  <th>Cargo</th>
-                  <th>Setor</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="func in funcionarios" :key="func.id">
-                  <td>{{ func.nome }}</td>
-                  <td>{{ func.email }}</td>
-                  <td>{{ func.cargo }}</td>
-                  <td>{{ func.setor }}</td>
-                  <td>
-                    <button class="btn-acao">Editar</button>
-                    <button class="btn-acao btn-perigo">Excluir</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else-if="!funcionarios" class="loading">
-              A carregar funcionários...
+              <table v-if="empresas && empresas.length > 0" class="custom-table interactive-table">
+                <thead>
+                  <tr>
+                    <th>Nome da Empresa</th>
+                    <th>Responsável</th>
+                    <th>Setor</th>
+                    <th>CNPJ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="empresa in empresas" :key="empresa.id" @click="gerirEmpresa(empresa.id)">
+                    <td><strong>{{ empresa.nomeEmpresa }}</strong></td>
+                    <td>{{ empresa.nomeResponsavel }}</td>
+                    <td>{{ empresa.setorAtuacao }}</td>
+                    <td>{{ empresa.cnpj }}</td>
+                    </tr>
+                </tbody>
+              </table>
+              
+              <div v-else class="no-data">
+                Nenhuma empresa encontrada.
+              </div>
             </div>
-            <div v-else class="no-data">
-              Nenhum funcionário registado.
+
+            <div v-else-if="userStore.isCliente">
+              <header class="page-header">
+                <h1 class="content-title">Colaboradores</h1>
+                <button class="btn-primary">+ Novo Funcionário</button>
+              </header>
+              
+              <p class="description">Gerencie o cadastro dos colaboradores da sua empresa.</p>
+
+              <table v-if="funcionarios && funcionarios.length > 0" class="custom-table">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Email</th>
+                    <th>Cargo</th>
+                    <th>Setor</th>
+                    <th style="text-align: center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="func in funcionarios" :key="func.id">
+                    <td>{{ func.nome }}</td>
+                    <td>{{ func.email }}</td>
+                    <td>{{ func.cargo }}</td>
+                    <td>{{ func.setor }}</td>
+                    <td style="text-align: center">
+                      <button class="btn-acao btn-edit">Editar</button>
+                      <button class="btn-acao btn-delete">Excluir</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              
+              <div v-else class="no-data">
+                Nenhum funcionário cadastrado.
+              </div>
             </div>
+            
           </div>
-          
-          <!-- Se for Psicologo -->
-          <div v-else-if="userStore.userRole === 'Psicologo'">
-             <h1 class="content-title">Dashboard do Psicólogo</h1>
-             <p>Bem-vindo! Use esta área para aceder aos relatórios de resultados.</p>
-          </div>
+
         </div>
+      </main>
 
-      </div>
-    </main>
+      <AppFooter />
+    </div>
+
   </div>
 </template>
 
 <style scoped>
-/* (O seu CSS existente) */
-:global(body) {
+/* --- FIX DE LAYOUT (CORTE DE TELA) --- */
+:global(html), :global(body), :global(#app) {
+  height: 100%;
   margin: 0;
-  background-color: #f0f2f5; 
+  padding: 0;
+  overflow: hidden; /* Importante para não rolar a janela toda */
 }
+
+/* --- LAYOUT GERAL --- */
 .app-layout {
   display: flex;
-  min-height: 100vh;
-  font-family: Arial, sans-serif;
+  height: 100%;
+  width: 100%;
+  background-color: #f3f4f6;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
+
+/* --- SIDEBAR --- */
 .sidebar {
-  width: 280px;
-  flex-shrink: 0;
+  width: 260px;
   background-color: #ffffff;
-  padding: 2rem 1.5rem;
-  border-right: 1px solid #e0e0e0;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem 1rem;
+  flex-shrink: 0;
+  z-index: 10;
 }
+
 .sidebar-logo {
-  width: 150px;
-  margin-bottom: 2.5rem;
+  width: 140px;
   display: block;
-  margin-left: auto;
-  margin-right: auto;
+  margin: 0 auto 2rem auto;
 }
+
 .sidebar-nav {
   list-style: none;
   padding: 0;
   margin: 0;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
 }
-.sidebar-nav li {
-  margin-bottom: 0.5rem;
-}
-.sidebar-nav li.user-display {
-  font-size: 1.2rem;
-  font-weight: bold;
-  color: #333;
-  padding: 1rem;
+
+.user-badge {
+  padding: 0.75rem;
   margin-bottom: 1.5rem;
-  border-bottom: 1px solid #eee;
+  background-color: #f9fafb;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #374151;
   display: flex;
   align-items: center;
+  gap: 10px;
+  justify-content: center;
 }
-/* Estilo para router-link e a */
-.sidebar-nav a, .sidebar-nav router-link {
+
+.sidebar-nav li { margin-bottom: 5px; }
+
+.sidebar-nav a {
   display: flex;
   align-items: center;
-  padding: 0.8rem 1rem;
-  border-radius: 6px;
+  gap: 12px;
+  padding: 0.75rem 1rem;
+  color: #4b5563;
   text-decoration: none;
-  color: #555;
-  font-weight: 500;
-  transition: background-color 0.2s, color 0.2s;
-  cursor: pointer;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  transition: all 0.2s;
+  font-size: 0.95rem;
 }
-.sidebar-nav a:hover {
-  background-color: #f0f2f5;
+
+.sidebar-nav a:hover, .sidebar-nav a.router-link-active {
+  background-color: #eff6ff;
+  color: #2563eb;
+  font-weight: 600;
 }
-.sidebar-nav li.active a {
-  background-color: #e0eafc; 
-  color: #3b82f6; 
-  font-weight: bold;
+
+.logout-item {
+  margin-top: auto;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 1rem;
 }
-.sidebar-nav .icon {
-  display: inline-block;
-  width: 20px;
-  height: 20px;
-  margin-right: 0.8rem;
-  background-color: #ccc; 
-  border-radius: 50%;
-  flex-shrink: 0;
+.logout-item a { color: #ef4444; }
+.logout-item a:hover { background-color: #fef2f2; color: #dc2626; }
+
+/* --- MAIN WRAPPER --- */
+.main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;
 }
-.sidebar-nav li.logout-item {
-  margin-top: 2rem;
-}
-.sidebar-nav li.logout-item a {
-  color: #d9534f;
-  font-weight: bold;
-}
-.sidebar-nav li.logout-item a:hover {
-  background-color: #fdf2f2;
-}
+
+/* --- CONTEÚDO PRINCIPAL --- */
 .main-content {
   flex: 1;
-  background-color: #333;
   padding: 2rem;
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  overflow-y: auto;
+  background-color: #f3f4f6;
 }
+
 .responder-container {
-  max-width: 900px;
   width: 100%;
-  margin: 0;
-  padding: 2.5rem 3rem;
-  border-radius: 8px;
-  background-color: #f4f7f6;
-  color: #333; 
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  max-width: 1000px;
+  background: white;
+  padding: 2.5rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
-.loading, .error-message, .no-data {
-  text-align: center;
-  padding: 3rem;
-  font-size: 1.2rem;
-  color: #555;
-}
-.error-message { color: #d9534f; }
-h1.content-title {
-  font-size: 2.2rem;
-  color: #333;
-  border-bottom: 4px solid #3b82f6; 
-  padding-bottom: 0.5rem;
-  margin-bottom: 2rem;
-  display: inline-block;
-}
-h2 {
-  font-size: 1.5rem;
+
+/* --- HEADER DA PÁGINA --- */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 1rem;
+  border-bottom: 2px solid #f3f4f6;
+  padding-bottom: 1rem;
 }
-.funcionarios-tabela {
+
+.content-title {
+  margin: 0;
+  font-size: 1.75rem;
+  color: #111827;
+}
+
+.description { color: #6b7280; margin-bottom: 1.5rem; }
+
+/* --- TABELAS --- */
+.custom-table {
   width: 100%;
-  border-collapse: collapse;
-  margin-top: 1rem;
-  color: #333;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
 }
-.funcionarios-tabela th,
-.funcionarios-tabela td {
-  border: 1px solid #ddd;
-  padding: 0.8rem 1rem;
+
+/* Estilo para tabela interativa (clicável) */
+.interactive-table tbody tr {
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+.interactive-table tbody tr:hover {
+  background-color: #eff6ff; /* Azul claro no hover */
+  transform: scale(1.002);
+}
+
+.custom-table th {
+  background-color: #f9fafb;
+  padding: 1rem;
   text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
 }
-.funcionarios-tabela th {
-  background-color: #eee;
+
+.custom-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #4b5563;
 }
+
+.custom-table tr:last-child td { border-bottom: none; }
+
+/* --- BOTÕES --- */
+.btn-primary {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-primary:hover { background-color: #1d4ed8; }
+
 .btn-acao {
-  padding: 0.4rem 0.6rem;
-  margin-right: 0.5rem;
+  padding: 0.4rem 0.8rem;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  background-color: #42b883; 
-  color: white;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin: 0 2px;
+  transition: opacity 0.2s;
 }
-.btn-perigo {
-  background-color: #ff6b6b;
+.btn-edit { background-color: #f59e0b; color: white; }
+.btn-delete { background-color: #ef4444; color: white; }
+.btn-acao:hover { opacity: 0.85; }
+
+/* --- ESTADOS --- */
+.loading, .error-message, .no-data {
+  text-align: center;
+  padding: 3rem;
+  color: #6b7280;
 }
-.btn-acao:hover {
-  opacity: 0.8;
-}
+.error-message { color: #dc2626; }
 </style>

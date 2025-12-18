@@ -8,13 +8,17 @@ using system_copsoq_api.Models.Formularios;
 using system_copsoq_api.Models; 
 using System.Linq;
 using System.Threading.Tasks;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
+using System.IO;
 
 namespace system_copsoq_api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
     // Reativando a segurança que tínhamos comentado
-    [Authorize(Roles = "Admin")] // Use "Admin" (do seu enum Role.cs)
+    [Authorize(Roles = "Admin, Psicologo")] // Use "Admin" (do seu enum Role.cs)
     public class QuestionarioController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -177,6 +181,134 @@ namespace system_copsoq_api.Controllers
                 .ToListAsync();
 
             return Ok(questionarios);
+        }
+
+        [HttpGet("respostas/{token}")]
+        [Authorize(Roles = "Psicologo")]
+        public async Task<IActionResult> GetRespostasDetalhadas(string token)
+        {
+            // 1. Tenta converter a string para Guid. Se falhar, retorna erro.
+            if (!Guid.TryParse(token, out var tokenGuid))
+            {
+                return BadRequest("O token fornecido não é válido.");
+            }
+
+            // 2. Usa a variável convertida (tokenGuid) na busca
+            // ATENÇÃO: Mudei para ToListAsync, pois um token geralmente tem VÁRIAS respostas
+            var respostas = await _context.RespostasFuncionarios
+                .Include(r => r.Pergunta)
+                .Include(r => r.Disparo)
+                .Where(r => r.Disparo.TokenAcesso == tokenGuid) // 'Where' para pegar todas
+                .ToListAsync();
+
+            if (respostas == null || !respostas.Any())
+                return NotFound("Nenhuma resposta encontrada para este token.");
+
+            return Ok(respostas);
+        }
+
+        [HttpGet("download-pdf/{token}")]
+        [AllowAnonymous] // <--- IMPORTANTE: Permite baixar clicando no link sem precisar de login
+        public async Task<IActionResult> DownloadRelatorioIndividual(string token)
+        {
+            // 1. Validar Token
+            if (!Guid.TryParse(token, out var tokenGuid)) 
+                return BadRequest("Token inválido");
+
+            // 2. Buscar Dados (Disparo + Respostas + Perguntas)
+            var dados = await _context.Disparos
+                .Include(d => d.Funcionario)
+                .Include(d => d.Questionario)
+                .Include(d => d.Respostas)
+                    .ThenInclude(r => r.Pergunta) // Traz o texto da pergunta
+                .FirstOrDefaultAsync(d => d.TokenAcesso == tokenGuid);
+
+            if (dados == null) return NotFound("Questionário não encontrado.");
+            if (!dados.Respostas.Any()) return BadRequest("Este questionário ainda não foi respondido.");
+
+            // 3. Configuração do PDF
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            // 4. Desenhar o PDF
+            var documento = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Margin(2, Unit.Centimetre);
+                    page.Size(PageSizes.A4);
+                    page.DefaultTextStyle(x => x.FontSize(12).FontFamily(Fonts.Arial));
+
+                    // -- Cabeçalho --
+                    page.Header().Row(row =>
+                    {
+                        row.RelativeItem().Column(col =>
+                        {
+                            col.Item().Text("Relatório Individual de Respostas").FontSize(20).SemiBold().FontColor(Colors.Blue.Medium);
+                            col.Item().Text($"Questionário: {dados.Questionario.Titulo}").FontSize(14).FontColor(Colors.Grey.Darken2);
+                        });
+                    });
+
+                    // -- Conteúdo --
+                    page.Content().PaddingVertical(1, Unit.Centimetre).Column(col =>
+                    {
+                        // Dados do Funcionário
+                        col.Item().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingBottom(5).Row(row => 
+                        {
+                            row.RelativeItem().Text($"Funcionário: {dados.Funcionario.Nome}");
+                            row.RelativeItem().AlignRight().Text($"Respondido em: {dados.DataResposta?.ToString("dd/MM/yyyy HH:mm") ?? "N/A"}");
+                        });
+                        
+                        col.Item().PaddingTop(15);
+
+                        // Tabela de Respostas
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.RelativeColumn(3); // Coluna da Pergunta (mais larga)
+                                columns.RelativeColumn(1); // Coluna da Resposta
+                            });
+
+                            // Cabeçalho da Tabela
+                            table.Header(header =>
+                            {
+                                header.Cell().Element(CellStyle).Text("Pergunta").SemiBold();
+                                header.Cell().Element(CellStyle).Text("Nota").SemiBold();
+                            });
+
+                            // Linhas da Tabela
+                            foreach (var resposta in dados.Respostas)
+                            {
+                                table.Cell().Element(CellStyle).Text(resposta.Pergunta.Texto);
+                                
+                                // Aqui mostramos o Valor (1 a 5). Se quiser converter para texto (ex: "Sempre"), precisaria fazer um switch/case ou join com Opcoes
+                                table.Cell().Element(CellStyle).Text(resposta.ValorResposta.ToString()); 
+                            }
+
+                            // Estilo auxiliar para células
+                            static IContainer CellStyle(IContainer container)
+                            {
+                                return container.BorderBottom(1).BorderColor(Colors.Grey.Lighten3).PaddingVertical(5);
+                            }
+                        });
+                    });
+
+                    // -- Rodapé --
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span("Página ");
+                        x.CurrentPageNumber();
+                    });
+                });
+            });
+
+            // 5. Gerar o arquivo na memória e retornar
+            var stream = new MemoryStream();
+            documento.GeneratePdf(stream);
+            stream.Position = 0;
+
+            string nomeArquivo = $"Relatorio_{dados.Funcionario.Nome.Replace(" ", "_")}.pdf";
+            return File(stream, "application/pdf", nomeArquivo);
         }
     }
 }

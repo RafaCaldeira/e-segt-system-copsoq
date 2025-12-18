@@ -9,6 +9,7 @@ import type { PlanoDeAcao, PlanoDeAcaoCreateDto, AcaoCreateDto, Acao } from '../
 import type { OpcaoRespostaCreateDto } from '../types/questionario.types';
 import type { DisparoCreateDto } from '../types/disparo.types';
 import type { Questionario } from '../types/questionario.types';
+import type { DisparoHistoricoDto } from '../types/disparo.types';
 
 
 
@@ -199,11 +200,17 @@ export const apiService = {
     try {
       const response = await fetch(`${API_BASE_URL}/planodeacao/acao/${acaoId}/status`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
-        body: JSON.stringify(novoStatus)
+        headers: {
+            ...getAuthHeaders(), // Mantém o token
+            'Content-Type': 'application/json' // Garante que o C# entenda que é JSON
+        },
+        // O C# espera: { "Status": "Concluido" }
+        // Antes estava enviando apenas: "Concluido"
+        body: JSON.stringify({ status: novoStatus }) 
       });
       return response.ok;
     } catch (error) {
+      console.error('Erro ao atualizar status:', error);
       return false;
     }
   },
@@ -407,6 +414,114 @@ async getFuncionariosPorEmpresaId(empresaId: number): Promise<Funcionario[] | nu
       }
     } catch (error) {
       return { success: false, message: 'Falha de rede.' };
+    }
+  },
+
+
+
+  async getEmpresasParaPsicologo(): Promise<Empresa[] | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/empresa/para-psicologo`, {
+      method: 'GET',
+      headers: getAuthHeaders()
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    return JSON.parse(JSON.stringify(data), (_key, val) => {
+      if (val?.$values) return val.$values;
+      return val;
+    });
+  } catch (error) {
+    console.error("Erro ao carregar empresas:", error);
+    return null;
+  }
+},
+
+async getFuncionariosComStatus(empresaId: number): Promise<any[] | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/funcionario/empresa/${empresaId}/funcionarios`,{
+      method: 'GET',
+      headers: getAuthHeaders()
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    return JSON.parse(JSON.stringify(data), (_key, val) => {
+      if (val?.$values) return val.$values;
+      return val;
+    });
+  } catch (error) {
+    console.error("Erro ao carregar funcionários:", error);
+    return null;
+  }
+},
+
+async getRespostasDetalhadas(funcionarioId: number): Promise<any | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/relatorio/respostas/${funcionarioId}`, {
+      method: 'GET',
+      headers: getAuthHeaders()
+    });
+
+    if (!response.ok) return null;
+
+    return await response.json();
+  } catch (error) {
+    console.error("Erro ao buscar respostas detalhadas:", error);
+    return null;
+  }
+}, 
+
+async getListaFuncionarios(empresaId: number): Promise<any[] | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/empresa/${empresaId}/lista-funcionarios`, {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      
+      // Limpeza do JSON ($id, $ref, $values)
+      return JSON.parse(JSON.stringify(data), (_key, v) => {
+         if (v && v.$values) return v.$values;
+         if (_key === '$id' || _key === '$ref') return undefined;
+         return v;
+      });
+    } catch (error) {
+      console.error('Erro ao buscar lista de funcionários:', error);
+      return null;
+    }
+  },
+
+  // **********************************
+  // *** MÉTODOS NOVOS (Histórico) ***
+  // **********************************
+  async getHistoricoDisparos(): Promise<DisparoHistoricoDto[] | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/disparo/historico`, {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+
+      // Limpeza padrão para garantir que arrays do .NET ($values) sejam lidos corretamente
+      return JSON.parse(JSON.stringify(data), (k, v) => {
+        if (v && v.$values) return v.$values;
+        if (k === '$id' || k === '$ref') return undefined;
+        return v;
+      }) as DisparoHistoricoDto[];
+      
+    } catch (error) {
+      console.error('Erro ao buscar histórico:', error);
+      return null;
     }
   }
 

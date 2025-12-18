@@ -12,5 +12,7 @@ namespace system_copsoq_api.DTOs
         public bool Respondido { get; set; }
         public DateTime? DataResposta { get; set; }
         public string Link { get; set; } = string.Empty; // O Token/Link
+        public string Setor { get; set; } = string.Empty;
+        public int EmpresaId { get; set; }
     }
 }

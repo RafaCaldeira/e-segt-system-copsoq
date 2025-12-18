@@ -4,8 +4,8 @@ namespace system_copsoq_api.DTOs.Responder
     public class FuncionarioSimplesDto
     {
         public string Nome { get; set; } = string.Empty;
-        public string Setor { get; set; } = string.Empty;
-        public string CPF { get; set; } = string.Empty;
-        public string NomeEmpresa { get; set; } = string.Empty; // Para ele confirmar a empresa
+        public string Cpf { get; set; } = string.Empty;         
+        public string Setor { get; set; } = string.Empty;       
+        public string NomeEmpresa { get; set; } = string.Empty;
     }
 }

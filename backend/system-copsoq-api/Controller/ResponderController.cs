@@ -1,19 +1,21 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using system_copsoq_api.Data;
-using system_copsoq_api.DTOs.Responder;
-using system_copsoq_api.Models; 
+using system_copsoq_api.DTOs.Responder; 
+using system_copsoq_api.DTOs;
+using system_copsoq_api.Models.Disparo;
+using system_copsoq_api.Models;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Collections.Generic;
-using system_copsoq_api.Models.Disparo; // <-- Importar Disparo
-using system_copsoq_api.Models.Formularios; // <-- Importar Formularios
 
 namespace system_copsoq_api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [AllowAnonymous] // Permite acesso sem login (crucial para o funcionário responder)
     public class ResponderController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -23,128 +25,144 @@ namespace system_copsoq_api.Controllers
             _context = context;
         }
 
-        // POST: api/responder/{token}
-        [HttpPost("{token}")]
-        public async Task<IActionResult> SubmitRespostas(Guid token, [FromBody] SubmissaoDto dto)
-        {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(ModelState);
-            }
-
-            // 1. Encontrar o Disparo (Incluindo o Funcionário)
-            var disparo = await _context.Disparos
-                .Include(d => d.Questionario)
-                    .ThenInclude(q => q.Perguntas) // Só precisamos das Perguntas
-                .Include(d => d.Funcionario) // Incluir o Funcionário para salvar o CPF
-                .FirstOrDefaultAsync(d => d.TokenAcesso == token);
-
-            // 2. Validar o Disparo
-            if (disparo == null)
-                return NotFound("Link inválido ou expirado.");
-            if (disparo.Respondido)
-                return BadRequest("Este questionário já foi respondido.");
-            if (disparo.Funcionario == null)
-                return NotFound("Funcionário associado a este link não foi encontrado.");
-
-            // 3. Validar as Respostas Recebidas
-            var idsPerguntasDoQuestionario = disparo.Questionario.Perguntas.Select(p => p.ID).ToList();
-            var idsPerguntasRespondidas = dto.Respostas.Select(r => r.PerguntaId).ToList();
-
-            if (idsPerguntasRespondidas.Except(idsPerguntasDoQuestionario).Any())
-            {
-                return BadRequest("Uma ou mais respostas são para perguntas que não pertencem a este questionário.");
-            }
-            
-            disparo.Funcionario.CPF = dto.Cpf; // Salva o CPF
-
-            // 4. Salvar as Respostas no Banco
-            var novasRespostas = dto.Respostas.Select(r => new RespostaFuncionario
-            {
-                DisparoID = disparo.ID,
-                PerguntaID = r.PerguntaId,
-                ValorResposta = r.ValorResposta
-            }).ToList();
-
-            // O seu código aqui (AddRange) estava correto!
-            _context.RespostasFuncionarios.AddRange(novasRespostas); 
-
-            // 5. Marcar o Disparo como Respondido
-            disparo.Respondido = true;
-            disparo.DataResposta = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(new { Message = "Respostas enviadas com sucesso!" });
-        }
-
-
-        // GET: api/responder/{token}
+        // ---------------------------------------------------------
+        // 1. GET: Puxar o questionário completo pelo Token
+        // Rota: GET api/responder/{token}
+        // ---------------------------------------------------------
         [HttpGet("{token}")]
-        public async Task<ActionResult<QuestionarioParaResponderDto>> GetQuestionarioParaResponder(Guid token)
+        public async Task<ActionResult<QuestionarioParaResponderDto>> GetQuestionarioPeloToken(string token)
         {
-            // 1. CORREÇÃO DA CONSULTA: Adicionado o '.' em falta
+            if (!Guid.TryParse(token, out var tokenGuid))
+                return BadRequest("Token inválido.");
+
+            // Busca o Disparo e carrega toda a árvore de dados necessária
             var disparo = await _context.Disparos
+                .Include(d => d.Funcionario)
+                    .ThenInclude(f => f.Empresa)
                 .Include(d => d.Questionario)
                     .ThenInclude(q => q.Dimensoes)
-                        .ThenInclude(dim => dim.Perguntas)
-                .Include(d => d.Questionario) // (Este Include é separado)
-                    .ThenInclude(q => q.OpcoesResposta) // <-- Carrega as Opções
-                .Include(d => d.Funcionario) 
-                    .ThenInclude(f => f.Empresa)
-                .FirstOrDefaultAsync(d => d.TokenAcesso == token);
+                        .ThenInclude(dim => dim.Perguntas) // Carrega perguntas dentro das dimensões
+                .Include(d => d.Questionario)
+                    .ThenInclude(q => q.OpcoesResposta)
+                .FirstOrDefaultAsync(d => d.TokenAcesso == tokenGuid);
 
-            // 2. Validar o Disparo
             if (disparo == null)
-                return NotFound("Link inválido ou expirado.");
+                return NotFound("Questionário não encontrado ou link inválido.");
+
             if (disparo.Respondido)
                 return BadRequest("Este questionário já foi respondido.");
-            if (disparo.Funcionario == null || disparo.Funcionario.Empresa == null)
-                return NotFound("Os dados do funcionário ou da empresa não foram encontrados.");
 
-            // 3. Montar o DTO de Resposta
-            var questionarioDto = new QuestionarioParaResponderDto
+            // Mapeamento Manual: Entidade -> DTO
+            // (Assumindo que você tem os DTOs auxiliares: DimensaoRespostaDto, PerguntaRespostaDto, etc.)
+            var dto = new QuestionarioParaResponderDto
             {
                 Id = disparo.Questionario.ID,
                 Titulo = disparo.Questionario.Titulo,
                 TextoIntroducao = disparo.Questionario.TextoIntroducao,
                 TextoConsentimento = disparo.Questionario.TextoConsentimento,
-
-                Dimensoes = disparo.Questionario.Dimensoes
-                    .OrderBy(d => d.Ordem) 
-                    .Select(d => new DimensaoRespostaDto
-                    {
-                        Id = d.ID,
-                        Titulo = d.Titulo,
-                        Ordem = d.Ordem,
-                        Perguntas = d.Perguntas
-                            .OrderBy(p => p.ID)
-                            .Select(p => new PerguntaRespostaDTO
-                            {
-                                Id = p.ID,
-                                Texto = p.Texto
-                            }).ToList()
-                    }).ToList(),
-
+                
+                // Mapeia Funcionário
                 Funcionario = new FuncionarioSimplesDto
                 {
                     Nome = disparo.Funcionario.Nome,
-                    Setor = disparo.Funcionario.Setor,
-                    CPF = disparo.Funcionario.CPF,
-                    NomeEmpresa = disparo.Funcionario.Empresa.NomeEmpresa
+                    Cpf = disparo.Funcionario.CPF, 
+                    Setor = disparo.Funcionario.Setor.ToString(),
+                    NomeEmpresa = disparo.Funcionario.Empresa != null ? disparo.Funcionario.Empresa.NomeEmpresa : "Empresa"
                 },
 
+                // Mapeia Opções de Resposta
                 OpcoesResposta = disparo.Questionario.OpcoesResposta
                     .OrderBy(o => o.Ordem)
-                    .Select(o => new OpcaoRespostaDto
+                    .Select(o => new OpcaoRespostaDto 
                     {
+                        // Ajuste os nomes das propriedades conforme seu OpcaoRespostaDto
                         Texto = o.Texto,
                         Valor = o.Valor,
                         Ordem = o.Ordem
+                    }).ToList(),
+
+                // Mapeia Dimensões e Perguntas (A parte mais importante)
+                Dimensoes = disparo.Questionario.Dimensoes
+                    .OrderBy(dim => dim.Ordem)
+                    .Select(dim => new DimensaoRespostaDto
+                    {
+                        Id = dim.ID,
+                        Titulo = dim.Titulo,
+                        // Assumindo que seu DimensaoRespostaDto tem uma lista de PerguntaRespostaDto
+                        Perguntas = dim.Perguntas.Select(p => new PerguntaRespostaDTO
+                        {
+                            Id = p.ID,
+                            Texto = p.Texto
+                        }).ToList()
                     }).ToList()
             };
 
-            return Ok(questionarioDto);
+            return Ok(dto);
+        }
+
+        // ---------------------------------------------------------
+        // 2. POST: Receber e Salvar as Respostas
+        // Rota: POST api/responder/{token}
+        // ---------------------------------------------------------
+        [HttpPost("{token}")]
+        public async Task<IActionResult> EnviarRespostas(string token, [FromBody] SubmissaoDto submissao)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            if (!Guid.TryParse(token, out var tokenGuid))
+                return BadRequest("Token inválido.");
+
+            // 1. Busca o Disparo para validar
+            var disparo = await _context.Disparos
+                .Include(d => d.Funcionario) // Precisamos do funcionário para checar o CPF se necessário
+                .FirstOrDefaultAsync(d => d.TokenAcesso == tokenGuid);
+
+            if (disparo == null) return NotFound("Disparo não encontrado.");
+            
+            if (disparo.Respondido) 
+                return BadRequest("Você já respondeu este questionário.");
+
+            // 2. Validação Opcional de CPF
+            // Compara o CPF enviado no JSON com o CPF do funcionário no banco
+            // Remove pontuação para evitar erros (ex: "123.456" vs "123456")
+            /*
+            var cpfBanco = disparo.Funcionario.CPF?.Replace(".", "").Replace("-", "").Trim();
+            var cpfEnviado = submissao.Cpf?.Replace(".", "").Replace("-", "").Trim();
+
+            if (cpfBanco != cpfEnviado)
+            {
+                 return BadRequest("O CPF informado não corresponde ao funcionário deste link.");
+            }
+            */
+
+            // 3. Processar as Respostas
+            var novasRespostas = new List<RespostaFuncionario>();
+
+            foreach (var respDto in submissao.Respostas)
+            {
+                var novaResposta = new RespostaFuncionario
+                {
+                    DisparoID = disparo.ID,
+                    PerguntaID = respDto.PerguntaId,
+                    ValorResposta = respDto.ValorResposta // Mapeia ValorResposta do DTO para Valor da Model
+                };
+                novasRespostas.Add(novaResposta);
+            }
+
+            if (!novasRespostas.Any())
+                return BadRequest("Nenhuma resposta foi enviada.");
+
+            // 4. Salvar tudo no Banco
+            _context.RespostasFuncionarios.AddRange(novasRespostas);
+
+            // Atualiza status do Disparo
+            disparo.Respondido = true;
+            disparo.DataResposta = DateTime.UtcNow;
+            
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "Respostas salvas com sucesso! Obrigado pela participação." });
         }
     }
 }

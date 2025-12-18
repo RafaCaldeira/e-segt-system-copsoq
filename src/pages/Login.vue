@@ -1,166 +1,181 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { useUserStore } from '../store/user'; // <-- 1. Importe a sua store
+import { useUserStore } from '../store/user'; 
 
-//refs para os campos do formulário
+// --- ESTADO ---
 const email = ref('');
 const password = ref('');
 const errorMessage = ref<string | null>(null);
 const isLoading = ref<boolean>(false);
 
-const router = useRouter(); // Para redirecionar após o login
-const userStore = useUserStore(); // 2. Use a store
+const router = useRouter();
+const userStore = useUserStore();
 
+// --- AÇÕES ---
 async function handleLogin() {
-  if (isLoading.value) return; // Previne cliques duplos
+  if (isLoading.value) return; 
 
   isLoading.value = true;
   errorMessage.value = null;
 
   try {
-    // 3. Chame a AÇÃO de login da store
+    // Tenta fazer o login na Store
     const success = await userStore.login(email.value, password.value);
 
     if (success) {
-      router.push('/dashboard'); 
+      // --- LÓGICA DE REDIRECIONAMENTO CORRIGIDA ---
+      
+      if (userStore.userRole === 'Cliente') {
+        // 1. Cliente vai para sua área de funcionários
+        router.push('/funcionario'); 
+      } 
+      else if (userStore.userRole === 'Psicologo') {
+        // 2. Psicólogo vai para a Área do Psicólogo (ou Dashboard, se preferir)
+        router.push('/psicologo'); 
+      } 
+      else {
+        // 3. Admin (e outros) vão para o Dashboard Principal
+        router.push('/dashboard'); 
+      }
+
     } else {
       errorMessage.value = 'Email ou senha inválidos.';
     }
   } catch (error) {
-    errorMessage.value = 'Ocorreu um erro inesperado. Tente novamente.';
+    console.error(error);
+    errorMessage.value = 'Erro de conexão. Verifique sua internet.';
+  } finally {
+    isLoading.value = false;
   }
-
-  isLoading.value = false;
 }
 </script>
 
 <template>
-  <div class="login-container">
-    <form @submit.prevent="handleLogin" class="login-form">
-      <h1>Login</h1>
+  <div class="login-wrapper">
+    <div class="login-card">
       
-      <div class="form-group">
-        <label for="email">Email</label>
-        <input 
-          type="email" 
-          id="email" 
-          v-model="email" 
-          required
-        >
+      <div class="header">
+        <h1>Bem-vindo de volta</h1>
+        <p class="subtitle">Insira suas credenciais para acessar</p>
       </div>
 
-      <div class="form-group">
-        <label for="password">Senha</label>
-        <input 
-          type="password" 
-          id="password" 
-          v-model="password" 
-          required
-        >
-      </div>
+      <form @submit.prevent="handleLogin" class="login-form">
+        
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input 
+            type="email" 
+            id="email" 
+            v-model="email" 
+            required
+            placeholder="exemplo@email.com"
+            autocomplete="email"
+          >
+        </div>
 
-      <div v-if="errorMessage" class="error-message">
-        {{ errorMessage }}
-      </div>
+        <div class="form-group">
+          <label for="password">Senha</label>
+          <input 
+            type="password" 
+            id="password" 
+            v-model="password" 
+            required
+            placeholder="••••••••"
+            autocomplete="current-password"
+          >
+        </div>
 
-      <button type="submit" :disabled="isLoading">
-        {{ isLoading ? 'A entrar...' : 'Entrar' }}
-      </button>
+        <div v-if="errorMessage" class="error-alert">
+          ⚠️ {{ errorMessage }}
+        </div>
 
-      <p class="register-link">
-        Não tem uma conta? 
-        <router-link to="/cadastro">Registe-se aqui</router-link>
-      </p>
-    </form>
+        <button type="submit" :disabled="isLoading" class="btn-login">
+          <span v-if="isLoading" class="spinner"></span>
+          {{ isLoading ? 'Entrando...' : 'Entrar' }}
+        </button>
+
+        <div class="footer-links">
+          <p>
+            Não tem uma conta? 
+            <router-link to="/cadastro">Cadastre-se</router-link>
+          </p>
+        </div>
+      </form>
+    </div>
   </div>
 </template>
 
 <style scoped>
-/* Estilos básicos para o formulário de login */
-.login-container {
+/* --- RESET GLOBAL PARA ESTA PÁGINA --- */
+:global(body) {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  background-color: #f0f2f5;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+/* --- WRAPPER DE TELA CHEIA --- */
+.login-wrapper {
+  height: 100vh; 
+  width: 100vw;
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 80vh;
-  /* (Presume que 'style.css' tem estilos globais de fundo) */
+  background-color: #f0f2f5;
 }
 
-.login-form {
+/* --- O CARD DE LOGIN --- */
+.login-card {
   width: 100%;
   max-width: 400px;
-  padding: 2rem;
-  border: 1px solid #444;
-  border-radius: 8px;
-  background-color: #2a2a2a; /* Cor de fundo escura, ajuste conforme necessário */
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  padding: 2.5rem;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05); 
 }
 
-h1 {
-  text-align: center;
-  margin-bottom: 1.5rem;
-  color: #fff; /* Cor do texto clara */
-}
+/* --- ESTILOS DO CONTEÚDO --- */
+.header { text-align: center; margin-bottom: 2rem; }
+h1 { margin: 0 0 0.5rem 0; color: #1a1a1a; font-size: 1.8rem; }
+.subtitle { color: #666; font-size: 0.95rem; margin: 0; }
 
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  color: #ccc; /* Cor do rótulo clara */
-}
+.form-group { margin-bottom: 1.2rem; }
+.form-group label { display: block; margin-bottom: 0.5rem; color: #333; font-weight: 600; font-size: 0.9rem; }
 
 .form-group input {
-  width: 100%;
-  padding: 0.8rem;
-  font-size: 1rem;
-  border-radius: 4px;
-  border: 1px solid #555;
-  background-color: #333;
-  color: #fff;
-  box-sizing: border-box; /* Garante que o padding não quebre o layout */
+  width: 100%; padding: 0.8rem; font-size: 1rem; border-radius: 6px;
+  border: 1px solid #ddd; background-color: #fff; color: #333; box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.form-group input:focus { outline: none; border-color: #42b883; box-shadow: 0 0 0 3px rgba(66, 184, 131, 0.1); }
+
+.error-alert {
+  background-color: #fee2e2; color: #dc2626; padding: 0.8rem; border-radius: 6px;
+  margin-bottom: 1.2rem; font-size: 0.9rem; text-align: center; border: 1px solid #fecaca;
 }
 
-.error-message {
-  color: #ff6b6b; /* Vermelho para erros */
-  margin-bottom: 1rem;
-  text-align: center;
+.btn-login {
+  width: 100%; padding: 0.9rem; font-size: 1rem; font-weight: bold; color: #fff;
+  background-color: #42b883; border: none; border-radius: 6px; cursor: pointer;
+  transition: background-color 0.2s; display: flex; justify-content: center; align-items: center; gap: 10px;
 }
+.btn-login:hover:not(:disabled) { background-color: #369a6e; }
+.btn-login:disabled { background-color: #9ca3af; cursor: not-allowed; }
 
-button {
-  width: 100%;
-  padding: 0.8rem;
-  font-size: 1.1rem;
-  font-weight: bold;
-  color: #fff;
-  background-color: #42b883; /* Verde Vue */
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s;
+.footer-links { margin-top: 1.5rem; text-align: center; font-size: 0.9rem; color: #666; }
+.footer-links a { color: #42b883; text-decoration: none; font-weight: bold; }
+.footer-links a:hover { text-decoration: underline; }
+
+.spinner {
+  width: 16px; height: 16px; border: 2px solid #ffffff; border-top-color: transparent;
+  border-radius: 50%; animation: spin 0.8s linear infinite;
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-button:hover {
-  background-color: #369a6e;
-}
-
-button:disabled {
-  background-color: #555;
-  cursor: not-allowed;
-}
-
-.register-link {
-  margin-top: 1.5rem;
-  text-align: center;
-  font-size: 0.9rem;
-  color: #ccc;
-}
-
-.register-link a {
-  color: #42b883;
-  text-decoration: none;
-  font-weight: bold;
+@media (max-width: 480px) {
+  .login-card { box-shadow: none; background-color: transparent; padding: 1.5rem; }
+  .login-wrapper { background-color: #fff; } 
 }
 </style>

@@ -13,7 +13,7 @@ namespace system_copsoq_api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize] // Protegido
+    [Authorize(Roles = "Admin,Psicologo")] // Protegido
     public class PlanoDeAcaoController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -86,16 +86,27 @@ namespace system_copsoq_api.Controllers
 
         // 4. MUDAR STATUS DA TAREFA (Concluir)
         // PUT: api/planodeacao/acao/{acaoId}/concluir
-        [HttpPut("acao/{acaoId}/concluir")]
-        public async Task<IActionResult> ConcluirAcao(int acaoId)
+        [HttpPut("acao/{acaoId}/status")]
+        public async Task<IActionResult> AtualizarStatus(int acaoId, [FromBody] StatusUpdateDto dto)
         {
             var acao = await _context.Acoes.FindAsync(acaoId);
             if (acao == null) return NotFound("Ação não encontrada");
 
-            acao.Status = StatusAcao.Concluido;
-            await _context.SaveChangesAsync();
+            // Tenta converter a string "Concluido" ou "Pendente" para o Enum
+            if (Enum.TryParse<StatusAcao>(dto.Status, true, out var novoStatus))
+            {
+                acao.Status = novoStatus;
+                await _context.SaveChangesAsync();
+                return Ok(acao);
+            }
 
-            return Ok(acao);
+            return BadRequest($"Status inválido. Use 'Pendente' ou 'Concluido'. Recebido: {dto.Status}");
         }
+    }
+
+    // ADICIONE ESTA CLASSE NO FINAL DO ARQUIVO (dentro do namespace)
+    public class StatusUpdateDto
+    {
+        public string Status { get; set; }
     }
 }

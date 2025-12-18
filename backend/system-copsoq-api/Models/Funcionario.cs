@@ -27,6 +27,7 @@ namespace system_copsoq_api.Models
 
         public int EmpresaID { get; set; } 
         public Empresa Empresa { get; set; } = null!; 
+        
 
         // 2. Agora 'Disparo' (a classe) é encontrada
         public ICollection<DisparoModel> Disparos { get; set; } = new List<DisparoModel>();

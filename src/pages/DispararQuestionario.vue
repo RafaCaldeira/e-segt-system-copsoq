@@ -6,21 +6,23 @@ import { useRouter } from 'vue-router';
 import type { Empresa } from '../types/empresa.types';
 import type { Funcionario } from '../types/funcionario.types';
 import type { DisparoCreateDto } from '../types/disparo.types';
+// 1. IMPORTAR O FOOTER
+import AppFooter from '../components/AppFooter.vue';
 
-// Interface local
+// --- Interfaces Locais ---
+interface SetorObjeto {
+  setor: string;
+}
+
 interface QuestionarioSimples {
   id: number;
   titulo: string;
-  setoresAplicaveis: { setor: string }[]; 
+  setoresAplicaveis: SetorObjeto[]; 
 }
 
+// --- Config ---
 const userStore = useUserStore();
 const router = useRouter();
-
-function handleLogout() {
-  localStorage.removeItem('token') // ou o que você usa
-  router.push('/login')
-}
 
 // --- Estado ---
 const isLoading = ref(false);
@@ -34,57 +36,46 @@ const funcionarios = ref<Funcionario[]>([]);
 // Seleções
 const selectedEmpresaId = ref<number | null>(null);
 const selectedQuestionarioId = ref<number | null>(null);
-const selectedSetor = ref<string>(''); // Filtro de Setor
+const selectedSetor = ref<string>(''); 
 const selectedFuncionariosIds = ref<number[]>([]);
 const allSelected = ref(false);
 
+// Permissões
+const displayName = computed(() => userStore.nomeEmpresa || userStore.userRole);
 
-// --- COMPUTED: SETORES DISPONÍVEIS (DINÂMICO) ---
-// *** CORREÇÃO AQUI ***
-// Em vez de lista fixa, pegamos os setores dos funcionários carregados
+// --- Logout ---
+function handleLogout() {
+  userStore.logout();
+  router.push('/login');
+}
+
+// --- COMPUTED ---
 const setoresDisponiveis = computed(() => {
   if (funcionarios.value.length === 0) return [];
-  
-  // Extrai os setores únicos dos funcionários
   const setoresUnicos = new Set(funcionarios.value.map(f => f.setor));
-  // Retorna como array ordenado
   return Array.from(setoresUnicos).sort();
 });
 
-
-// --- COMPUTED: Filtragem Inteligente de Questionários ---
 const questionariosFiltrados = computed(() => {
   if (!selectedEmpresaId.value) return [];
-
   const empresa = empresas.value.find(e => e.id === selectedEmpresaId.value);
   const setorEmpresa = empresa?.setorAtuacao || "";
 
   return questionarios.value.filter(q => {
-    // A. Se é Geral (sem restrições), mostra sempre
     if (!q.setoresAplicaveis || q.setoresAplicaveis.length === 0) return true;
-    // B. Se tem restrições, verifica se bate com o setor da empresa
-    return q.setoresAplicaveis.some((s: any) => {
-      const sNome = s.setor || s.Setor; 
-      return sNome === setorEmpresa;
-    });
+    return q.setoresAplicaveis.some(s => s.setor === setorEmpresa);
   });
 });
 
-// --- COMPUTED: Filtragem de Funcionários ---
 const funcionariosFiltrados = computed(() => {
   let lista = funcionarios.value;
-
-  // Filtra por Setor (se selecionado no dropdown)
   if (selectedSetor.value) {
     lista = lista.filter(f => f.setor === selectedSetor.value);
   }
-
   return lista;
 });
 
 // --- WATCHERS ---
-
-// Selecionar Todos (só os filtrados)
 watch(allSelected, (val) => {
   if (val) {
     selectedFuncionariosIds.value = funcionariosFiltrados.value.map(f => f.id);
@@ -93,52 +84,73 @@ watch(allSelected, (val) => {
   }
 });
 
-// Carregar funcionários ao mudar a empresa
 watch(selectedEmpresaId, async (newId) => {
   selectedFuncionariosIds.value = [];
   selectedQuestionarioId.value = null;
-  selectedSetor.value = ''; // Reseta o filtro de setor
+  selectedSetor.value = '';
   allSelected.value = false;
   funcionarios.value = []; 
+  message.value = null;
   
   if (newId) {
     isLoading.value = true;
-    const data = await apiService.getFuncionarios(); 
-    if (data) {
-        // Filtra localmente para garantir
+    try {
+      const data = await apiService.getFuncionarios(); 
+      if (data) {
         funcionarios.value = data.filter((f: any) => {
-            const fEmpresaId = f.empresaID || f.EmpresaID || f.empresaId;
-            return fEmpresaId === newId;
+           const fEmpresaId = f.empresaID || f.EmpresaID || f.empresaId;
+           return Number(fEmpresaId) === Number(newId);
         });
+      }
+    } catch (e) {
+      console.error(e);
+      message.value = { text: "Erro ao buscar funcionários.", type: 'error' };
+    } finally {
+      isLoading.value = false;
     }
-    isLoading.value = false;
   }
 });
 
-// --- LOAD ---
+// --- FUNÇÃO NOVA: Alternar seleção ao clicar na linha ---
+function toggleSelection(id: number) {
+  const index = selectedFuncionariosIds.value.indexOf(id);
+  if (index > -1) {
+    selectedFuncionariosIds.value.splice(index, 1); 
+  } else {
+    selectedFuncionariosIds.value.push(id); 
+  }
+}
+
+// --- LOAD INICIAL ---
 onMounted(async () => {
+  // Apenas Admin pode acessar esta tela
   if (!userStore.isAdmin) {
     router.push('/dashboard');
     return;
   }
 
   isLoading.value = true;
-  
-  const [resEmpresas, resQuestionarios] = await Promise.all([
-    apiService.getEmpresas(),
-    apiService.getQuestionarios()
-  ]);
+  try {
+    const [resEmpresas, resQuestionarios] = await Promise.all([
+      apiService.getEmpresas(),
+      apiService.getQuestionarios()
+    ]);
 
-  if (resEmpresas) empresas.value = resEmpresas;
-  if (resQuestionarios) questionarios.value = resQuestionarios as any[];
-  
-  isLoading.value = false;
+    if (resEmpresas) empresas.value = resEmpresas;
+    if (resQuestionarios) questionarios.value = resQuestionarios as any[];
+  } catch (e) {
+    message.value = { text: "Erro ao carregar dados iniciais.", type: 'error' };
+  } finally {
+    isLoading.value = false;
+  }
 });
 
-// --- ENVIAR ---
+// --- AÇÃO DE ENVIAR ---
 async function enviarDisparos() {
   if (!selectedQuestionarioId.value) return alert("Selecione um questionário.");
   if (selectedFuncionariosIds.value.length === 0) return alert("Selecione pelo menos um funcionário.");
+
+  if(!confirm(`Confirma o envio para ${selectedFuncionariosIds.value.length} funcionários?`)) return;
 
   isLoading.value = true;
   message.value = null;
@@ -148,169 +160,274 @@ async function enviarDisparos() {
     funcionarioIDs: selectedFuncionariosIds.value
   };
 
-  const result = await apiService.createDisparo(dto);
-
-  if (result.success) {
-    message.value = { text: result.message, type: 'success' };
-    selectedFuncionariosIds.value = [];
-    allSelected.value = false;
-  } else {
-    message.value = { text: result.message, type: 'error' };
+  try {
+    const result = await apiService.createDisparo(dto);
+    if (result && result.success) {
+      message.value = { text: 'Disparos enviados com sucesso!', type: 'success' };
+      selectedFuncionariosIds.value = [];
+      allSelected.value = false;
+    } else {
+      message.value = { text: result?.message || 'Erro ao enviar.', type: 'error' };
+    }
+  } catch (e) {
+    message.value = { text: 'Erro de comunicação com o servidor.', type: 'error' };
+  } finally {
+    isLoading.value = false;
   }
-  isLoading.value = false;
 }
 </script>
 
 <template>
   <div class="app-layout">
+    
     <nav class="sidebar">
-      <img src="../assets/logo-e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      <div class="logo-area">
+        <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      </div>
+      
+      <div class="user-badge">{{ displayName }}</div>
+
       <ul class="sidebar-nav">
-        <li class="user-display"><span class="icon"></span> Administrador</li>
-        <li><router-link to="/dashboard"><span class="icon"></span> Dashboard</router-link></li>
-        <li class="active"><a href="#"><span class="icon"></span> Disparar Formulários</a></li>
-        <li><router-link to="/criar-questionario"><span class="icon"></span> Criar Formulário</router-link></li>
-        <li class="logout-item"><a @click="handleLogout" href="#"><span class="icon icon-logout"></span> Sair</a></li>
+        <li v-if="userStore.isAdmin">
+          <router-link to="/criar-questionario"><span class="icon">📝</span> Criar Questionário</router-link>
+        </li>
+        <li v-if="userStore.isAdmin" class="active">
+          <router-link to="/disparo"><span class="icon">📨</span> Enviar Questionário</router-link>
+        </li>
+
+        <li v-if="userStore.isCliente">
+            <router-link to="/editar-cadastro"><span class="icon">⚙️</span> Editar Cadastro</router-link>
+        </li>
+        <li v-if="userStore.isCliente">
+            <router-link to="/funcionario"><span class="icon">👥</span> Funcionários</router-link>
+        </li>
+
+        <li v-if="userStore.userRole === 'Psicologo'">
+            <router-link to="/psicologo"><span class="icon">🧠</span> Área do Psicólogo</router-link>
+        </li>
+
+        <li><router-link to="/plano-de-acao"><span class="icon">📋</span> Plano de Ação</router-link></li>
+        <li><router-link to="/relatorio"><span class="icon">📊</span> Relatórios</router-link></li>
+        <li><router-link to="/historico"><span class="icon">📜</span> Histórico</router-link></li>
+        
+        <li class="logout-item"><a @click.prevent="handleLogout" href="#"><span class="icon">🚪</span> Sair</a></li>
       </ul>
     </nav>
 
-    <main class="main-content">
-      <div class="responder-container">
-        <h1 class="content-title">Disparar Formulários</h1>
-        <p class="desc">Selecione a empresa para filtrar os questionários disponíveis.</p>
+    <div class="main-wrapper">
+      <main class="main-content">
+        <div class="content-wrapper">
+          
+          <h1 class="page-title">Disparar Formulários</h1>
+          <p class="page-desc">Selecione a empresa e o questionário para enviar aos colaboradores.</p>
 
-        <div v-if="message" :class="['alert', message.type === 'success' ? 'alert-success' : 'alert-error']">
-          {{ message.text }}
-        </div>
+          <div v-if="message" :class="['alert', message.type === 'success' ? 'alert-success' : 'alert-error']">
+            {{ message.text }}
+          </div>
 
-        <div class="filters-card">
-          <div class="form-grid">
+          <div class="filters-card">
+            <div class="form-grid">
+              
+              <div class="form-group">
+                <label>1. Selecione a Empresa</label>
+                <select v-model="selectedEmpresaId" :disabled="isLoading">
+                  <option :value="null" disabled>-- Escolha uma empresa --</option>
+                  <option v-for="emp in empresas" :key="emp.id" :value="emp.id">
+                    {{ emp.nomeEmpresa }}
+                  </option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>2. Selecione o Formulário</label>
+                <select v-model="selectedQuestionarioId" :disabled="!selectedEmpresaId || isLoading">
+                  <option :value="null" disabled>
+                    {{ selectedEmpresaId ? '-- Escolha o questionário --' : 'Aguardando Empresa...' }}
+                  </option>
+                  <option v-for="q in questionariosFiltrados" :key="q.id" :value="q.id">
+                    {{ q.titulo }}
+                  </option>
+                </select>
+              </div>
+
+               <div class="form-group">
+                <label>3. Filtrar por Setor (Opcional)</label>
+                <select v-model="selectedSetor" :disabled="!selectedEmpresaId || isLoading || funcionarios.length === 0">
+                  <option value="">Todos os Setores</option>
+                  <option v-for="setor in setoresDisponiveis" :key="setor" :value="setor">
+                    {{ setor }}
+                  </option>
+                </select>
+              </div>
+
+            </div>
+          </div>
+
+          <div v-if="selectedEmpresaId" class="selection-area fade-in">
             
-            <!-- 1. EMPRESA -->
-            <div class="form-group">
-              <label>Selecione a Empresa</label>
-              <select v-model="selectedEmpresaId" :disabled="isLoading">
-                <option :value="null" disabled>-- Escolha uma empresa --</option>
-                <option v-for="emp in empresas" :key="emp.id" :value="emp.id">
-                  {{ emp.nomeEmpresa }} ({{ emp.setorAtuacao }})
-                </option>
-              </select>
+            <div class="selection-header">
+              <div class="info-selecao">
+                <h3>Funcionários</h3>
+                <span class="badge-count">{{ selectedFuncionariosIds.length }} selecionados</span>
+              </div>
+              
+              <button class="btn-enviar" @click="enviarDisparos" :disabled="isLoading || selectedFuncionariosIds.length === 0">
+                {{ isLoading ? 'Enviando...' : '🚀 Enviar Disparos' }}
+              </button>
             </div>
 
-            <!-- 2. QUESTIONÁRIO -->
-            <div class="form-group">
-              <label>Selecione o Formulário</label>
-              <select v-model="selectedQuestionarioId" :disabled="!selectedEmpresaId || isLoading">
-                <option :value="null" disabled>
-                  {{ selectedEmpresaId ? '-- Escolha o questionário --' : '-- Selecione a empresa primeiro --' }}
-                </option>
-                <option v-for="q in questionariosFiltrados" :key="q.id" :value="q.id">
-                  {{ q.titulo }}
-                </option>
-              </select>
-            </div>
+            <div class="table-container">
+              <table class="selection-table">
+                <thead>
+                  <tr>
+                    <th style="width: 50px; text-align: center;">
+                      <input type="checkbox" v-model="allSelected" title="Selecionar Todos Visíveis">
+                    </th>
+                    <th>Nome</th>
+                    <th>Email</th>
+                    <th>Setor</th>
+                    <th>Cargo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="func in funcionariosFiltrados" :key="func.id" 
+                      :class="{ 'row-selected': selectedFuncionariosIds.includes(func.id) }"
+                      @click="toggleSelection(func.id)"
+                      style="cursor: pointer;">
+                    
+                    <td style="text-align: center;" @click.stop>
+                      <input type="checkbox" :value="func.id" v-model="selectedFuncionariosIds">
+                    </td>
+                    <td class="fw-bold">{{ func.nome }}</td>
+                    <td>{{ func.email }}</td>
+                    <td><span class="badge-setor">{{ func.setor }}</span></td>
+                    <td>{{ func.cargo }}</td>
+                  </tr>
+                </tbody>
+              </table>
 
-             <!-- 3. FILTRO SETOR (AGORA DINÂMICO) -->
-             <div class="form-group">
-              <label>Filtrar Funcionários por Setor</label>
-              <select v-model="selectedSetor" :disabled="!selectedEmpresaId || isLoading || funcionarios.length === 0">
-                <option value="">Todos os Setores</option>
-                <!-- Usa o Computed 'setoresDisponiveis' -->
-                <option v-for="setor in setoresDisponiveis" :key="setor" :value="setor">
-                  {{ setor }}
-                </option>
-              </select>
+              <div v-if="funcionariosFiltrados.length === 0" class="no-data">
+                Nenhum funcionário encontrado com os filtros atuais.
+              </div>
             </div>
 
           </div>
+
+          <div v-else class="empty-state">
+            <p>👆 Selecione uma empresa acima para carregar a lista de funcionários.</p>
+          </div>
+
         </div>
+      </main>
 
-        <!-- TABELA DE FUNCIONÁRIOS -->
-        <div v-if="selectedEmpresaId" class="selection-area">
-          <div class="selection-header">
-            <h3>Funcionários ({{ selectedFuncionariosIds.length }} selecionados)</h3>
-            <button class="btn-enviar" @click="enviarDisparos" :disabled="isLoading || selectedFuncionariosIds.length === 0">
-              {{ isLoading ? 'Enviando...' : '🚀 Enviar Agora' }}
-            </button>
-          </div>
+      <AppFooter />
+    </div>
 
-          <table class="selection-table">
-            <thead>
-              <tr>
-                <th style="width: 40px;">
-                  <input type="checkbox" v-model="allSelected">
-                </th>
-                <th>Nome</th>
-                <th>Email</th>
-                <th>Setor</th>
-                <th>Cargo</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="func in funcionariosFiltrados" :key="func.id" :class="{ selected: selectedFuncionariosIds.includes(func.id) }">
-                <td>
-                  <input type="checkbox" :value="func.id" v-model="selectedFuncionariosIds">
-                </td>
-                <td>{{ func.nome }}</td>
-                <td>{{ func.email }}</td>
-                <td><span class="badge">{{ func.setor }}</span></td>
-                <td>{{ func.cargo }}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div v-if="funcionariosFiltrados.length === 0" class="no-data">
-            Nenhum funcionário encontrado para este filtro.
-          </div>
-        </div>
-
-      </div>
-    </main>
   </div>
 </template>
 
 <style scoped>
-/* (Mesmos estilos) */
-:global(body) { margin: 0; background-color: #f0f2f5; font-family: Arial, sans-serif; }
-.app-layout { display: flex; min-height: 100vh; }
-.sidebar { width: 280px; flex-shrink: 0; background-color: #ffffff; padding: 2rem 1.5rem; border-right: 1px solid #e0e0e0; }
-.sidebar-logo { width: 150px; margin-bottom: 2rem; display: block; margin: 0 auto 2rem auto; }
-.sidebar-nav { list-style: none; padding: 0; margin: 0; }
-.sidebar-nav li { margin-bottom: 0.5rem; }
-.sidebar-nav li.user-display { font-weight: bold; padding: 1rem; border-bottom: 1px solid #eee; display: flex; align-items: center; color: #333; }
-.sidebar-nav a { display: flex; align-items: center; padding: 0.8rem 1rem; border-radius: 6px; text-decoration: none; color: #555; transition: background 0.2s; }
-.sidebar-nav a:hover { background-color: #f0f2f5; }
-.sidebar-nav li.active a { background-color: #e0eafc; color: #3b82f6; font-weight: bold; }
-.sidebar-nav .icon { width: 20px; height: 20px; margin-right: 0.8rem; background-color: #ccc; border-radius: 50%; }
-.logout-item { margin-top: 2rem; }
-.logout-item a { color: #d9534f; font-weight: bold; }
+/* --- FIX DE LAYOUT (Rolagem) --- */
+:global(html), :global(body), :global(#app) {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; 
+}
 
-.main-content { flex: 1; background-color: #333; padding: 2rem; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; }
-.responder-container { max-width: 1000px; width: 100%; padding: 2.5rem 3rem; border-radius: 8px; background-color: #f4f7f6; color: #333; }
-.content-title { font-size: 2rem; color: #333; border-bottom: 4px solid #3b82f6; padding-bottom: 0.5rem; margin-bottom: 1rem; display: inline-block; }
-.desc { color: #666; margin-bottom: 2rem; }
+/* Layout Geral */
+:global(body) { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
 
-.filters-card { background: #fff; padding: 1.5rem; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 2rem; }
-.form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem; }
-.form-group { display: flex; flex-direction: column; }
-.form-group label { font-weight: bold; margin-bottom: 0.5rem; color: #555; font-size: 0.9rem; }
-.form-group select { padding: 0.8rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; background-color: #fff; color: #333; }
+.app-layout { 
+  display: flex; 
+  height: 100%; 
+  width: 100%; 
+}
 
-.selection-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-.btn-enviar { padding: 0.8rem 1.5rem; background-color: #28a745; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 1rem; transition: background 0.2s; }
-.btn-enviar:hover:not(:disabled) { background-color: #218838; }
-.btn-enviar:disabled { background-color: #aaa; cursor: not-allowed; }
+/* Sidebar */
+.sidebar { 
+  width: 260px; 
+  background-color: #ffffff; 
+  border-right: 1px solid #e5e7eb; 
+  display: flex; 
+  flex-direction: column; 
+  padding: 1.5rem 1rem; 
+  flex-shrink: 0; 
+  z-index: 10;
+}
+.sidebar-logo { width: 120px; display: block; margin: 0 auto 1.5rem auto; }
+.user-badge { background: #f3f4f6; padding: 0.5rem; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 1.5rem; color: #374151; }
+.sidebar-nav { list-style: none; padding: 0; margin: 0; flex: 1; overflow-y: auto; }
+.sidebar-nav li { margin-bottom: 5px; }
+.sidebar-nav a { display: flex; align-items: center; padding: 0.75rem 1rem; color: #4b5563; text-decoration: none; border-radius: 6px; font-weight: 500; transition: all 0.2s; }
+.sidebar-nav a:hover { background: #f3f4f6; color: #111; }
+.sidebar-nav li.active a { background: #eff6ff; color: #2563eb; font-weight: 600; }
+.sidebar-nav .icon { margin-right: 10px; min-width: 20px; text-align: center; }
+.logout-item { margin-top: auto; border-top: 1px solid #f3f4f6; padding-top: 1rem; }
+.logout-item a { color: #ef4444; }
 
-.selection-table { width: 100%; border-collapse: collapse; background-color: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-.selection-table th, .selection-table td { padding: 1rem; text-align: left; border-bottom: 1px solid #eee; }
-.selection-table th { background-color: #f8f9fa; font-weight: bold; color: #555; text-transform: uppercase; font-size: 0.85rem; }
-.selection-table tr:hover { background-color: #f1f1f1; }
-.selection-table tr.selected { background-color: #e0eafc; }
-.badge { background-color: #eee; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.85rem; color: #555; }
+/* --- MAIN WRAPPER (Novo container flex column) --- */
+.main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh; /* Altura total da viewport */
+  overflow-y: auto; /* Scroll acontece aqui */
+}
 
-.alert { padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; font-weight: bold; }
-.alert-success { background-color: #d1e7dd; color: #0f5132; border: 1px solid #badbcc; }
-.alert-error { background-color: #f8d7da; color: #842029; border: 1px solid #f5c6cb; }
-.no-data-message { text-align: center; padding: 3rem; font-size: 1.2rem; color: #777; border: 2px dashed #ccc; border-radius: 8px; }
-.no-data { text-align: center; padding: 2rem; color: #888; }
+/* --- MAIN CONTENT --- */
+.main-content { 
+  flex: 1; /* Empurra o footer para baixo */
+  padding: 2rem; 
+  display: flex; 
+  justify-content: center; 
+  align-items: flex-start;
+  background-color: #f0f2f5;
+}
+
+.content-wrapper { max-width: 1000px; width: 100%; background-color: #ffffff; padding: 2.5rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 2rem; }
+.page-title { font-size: 1.8rem; color: #1f2937; margin: 0 0 0.5rem 0; }
+.page-desc { color: #6b7280; margin-bottom: 2rem; }
+
+/* FILTROS */
+.filters-card { background: #f9fafb; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb; margin-bottom: 2rem; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; }
+.form-group label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.5rem; color: #374151; }
+.form-group select { width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; background: white; font-size: 0.95rem; cursor: pointer; }
+.form-group select:disabled { background: #e5e7eb; cursor: not-allowed; color: #9ca3af; }
+
+/* SELEÇÃO */
+.selection-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem; }
+.info-selecao h3 { margin: 0; font-size: 1.2rem; color: #111; display: inline-block; margin-right: 10px; }
+.badge-count { background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 12px; font-size: 0.85rem; font-weight: bold; }
+.btn-enviar { padding: 0.75rem 1.5rem; background-color: #10b981; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.btn-enviar:hover:not(:disabled) { background-color: #059669; }
+.btn-enviar:disabled { background-color: #9ca3af; cursor: not-allowed; box-shadow: none; }
+
+/* TABELA */
+.table-container { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+.selection-table { width: 100%; border-collapse: collapse; }
+.selection-table th { background: #f3f4f6; padding: 1rem; text-align: left; color: #4b5563; font-weight: 600; border-bottom: 1px solid #e5e7eb; }
+.selection-table td { padding: 0.8rem 1rem; border-bottom: 1px solid #f3f4f6; color: #374151; }
+.selection-table tr:hover { background-color: #f9fafb; }
+.selection-table tr.row-selected { background-color: #eff6ff; }
+.badge-setor { background: #f3f4f6; padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; color: #4b5563; border: 1px solid #e5e7eb; }
+.fw-bold { font-weight: 600; }
+
+/* UTIL */
+.alert { padding: 1rem; border-radius: 6px; margin-bottom: 1.5rem; font-weight: 500; }
+.alert-success { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+.alert-error { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+.no-data { text-align: center; padding: 2rem; color: #6b7280; font-style: italic; }
+.empty-state { text-align: center; color: #9ca3af; margin-top: 3rem; font-size: 1.1rem; }
+.fade-in { animation: fadeIn 0.4s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Responsivo */
+@media (max-width: 768px) {
+  .app-layout { flex-direction: column; overflow: auto; }
+  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #e5e7eb; padding: 1rem; }
+  .main-wrapper { height: auto; overflow-y: visible; }
+  .content-wrapper { padding: 1.5rem; }
+}
 </style>

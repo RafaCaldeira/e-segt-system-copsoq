@@ -1,143 +1,338 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useUserStore } from '../store/user';
-import { apiService, type DisparoHistoricoDto } from '../services/api.service';
 import { useRouter } from 'vue-router';
+import type { DisparoHistoricoDto } from '../types/disparo.types';
+import type { Empresa } from '../types/empresa.types';
+import { apiService } from '../services/api.service';
+// 1. IMPORTAR O FOOTER
+import AppFooter from '../components/AppFooter.vue';
 
 const userStore = useUserStore();
 const router = useRouter();
 
-const historico = ref<DisparoHistoricoDto[]>([]);
+// Estado
+const historicoCompleto = ref<DisparoHistoricoDto[]>([]);
+const empresas = ref<Empresa[]>([]);
+const selectedEmpresaId = ref<number | null>(null);
 const isLoading = ref(true);
 
-// Sidebar
-function handleLogout() { userStore.logout(); router.push('/login'); }
+// Permissões
+const podeFiltrar = computed(() => userStore.isAdmin || userStore.userRole === 'Psicologo');
 const displayName = computed(() => userStore.nomeEmpresa || userStore.userRole);
+
+// Ações da Tabela (Copiar Link): Admin e Psicólogo podem ver
+const podeVerAcoesTabela = computed(() => userStore.isAdmin || userStore.userRole === 'Psicologo');
 
 onMounted(async () => {
   if (!userStore.isLoggedIn) { router.push('/login'); return; }
-  await carregarHistorico();
+  
+  isLoading.value = true;
+  try {
+    if (podeFiltrar.value) {
+      const listaEmpresas = await apiService.getEmpresas();
+      if (listaEmpresas) empresas.value = listaEmpresas;
+    } else {
+      selectedEmpresaId.value = userStore.empresaId;
+    }
+
+    const data = await apiService.getHistoricoDisparos();
+    if (data) {
+      historicoCompleto.value = data;
+    }
+  } finally {
+    isLoading.value = false;
+  }
 });
 
-async function carregarHistorico() {
-  isLoading.value = true;
-  const data = await apiService.getHistoricoDisparos();
-  if (data) {
-    historico.value = data;
-  }
-  isLoading.value = false;
+// --- COMPUTEDS ---
+const historicoFiltrado = computed(() => {
+  if (!selectedEmpresaId.value) return [];
+  return historicoCompleto.value.filter(h => h.empresaId === selectedEmpresaId.value);
+});
+
+const estatisticasGerais = computed(() => {
+  const total = historicoFiltrado.value.length;
+  const respondidos = historicoFiltrado.value.filter(h => h.respondido).length;
+  const porcentagem = total > 0 ? Math.round((respondidos / total) * 100) : 0;
+  return { total, respondidos, porcentagem };
+});
+
+interface EstatisticaSetor {
+  nome: string; total: number; respondidos: number; porcentagem: number;
 }
+
+const progressoPorSetor = computed<EstatisticaSetor[]>(() => {
+  const grupos: Record<string, { total: number; respondidos: number }> = {};
+  historicoFiltrado.value.forEach(item => {
+    const nomeSetor = item.setor || 'Setor Não Definido'; 
+    if (!grupos[nomeSetor]) grupos[nomeSetor] = { total: 0, respondidos: 0 };
+    grupos[nomeSetor].total++;
+    if (item.respondido) grupos[nomeSetor].respondidos++;
+  });
+  return Object.keys(grupos).map(setor => {
+    const dados = grupos[setor]!; 
+    return {
+      nome: setor,
+      total: dados.total,
+      respondidos: dados.respondidos,
+      porcentagem: dados.total > 0 ? Math.round((dados.respondidos / dados.total) * 100) : 0
+    };
+  });
+});
+
+function handleLogout() { userStore.logout(); router.push('/login'); }
 
 function copiarLink(token: string) {
   const urlCompleta = `${window.location.origin}/responder/${token}`;
-  navigator.clipboard.writeText(urlCompleta).then(() => {
-    alert("Link copiado para a área de transferência!");
-  });
+  navigator.clipboard.writeText(urlCompleta).then(() => alert("Link copiado!"));
 }
 
 function formatarData(dataIso: string) {
   if (!dataIso) return '-';
-  return new Date(dataIso).toLocaleDateString('pt-BR') + ' ' + new Date(dataIso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute:'2-digit' });
+  return new Date(dataIso).toLocaleDateString('pt-BR');
 }
 </script>
 
 <template>
   <div class="app-layout">
+    
     <nav class="sidebar">
-      <img src="../assets/logo-e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      <div class="logo-area">
+        <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      </div>
+      
+      <div class="user-badge">{{ displayName }}</div>
+
       <ul class="sidebar-nav">
-        <li class="user-display"><span class="icon"></span> {{ displayName }}</li>
-        <li><router-link to="/dashboard"><span class="icon"></span> Dashboard</router-link></li>
-        <!-- Mostra links diferentes dependendo da Role -->
-        <li v-if="userStore.isAdmin"><router-link to="/disparar"><span class="icon"></span> Disparar Formulários</router-link></li>
-        <li class="active"><a href="#"><span class="icon"></span> Histórico</a></li>
-        <li class="logout-item"><a @click="handleLogout" href="#"><span class="icon icon-logout"></span> Sair</a></li>
+        <li v-if="userStore.isAdmin">
+          <router-link to="/criar-questionario"><span class="icon">📝</span> Criar Questionário</router-link>
+        </li>
+        <li v-if="userStore.isAdmin">
+          <router-link to="/disparo"><span class="icon">📨</span> Enviar Questionário</router-link>
+        </li>
+
+        <li v-if="userStore.isCliente">
+            <router-link to="/editar-cadastro"><span class="icon">⚙️</span> Editar Cadastro</router-link>
+        </li>
+        <li v-if="userStore.isCliente">
+            <router-link to="/funcionario"><span class="icon">👥</span> Funcionários</router-link>
+        </li>
+
+        <li v-if="userStore.userRole === 'Psicologo'">
+            <router-link to="/psicologo"><span class="icon">🧠</span> Área do Psicólogo</router-link>
+        </li>
+
+        <li><router-link to="/plano-de-acao"><span class="icon">📋</span> Plano de Ação</router-link></li>
+        <li><router-link to="/relatorio"><span class="icon">📊</span> Relatórios</router-link></li>
+        <li class="active"><router-link to="/historico"><span class="icon">📜</span> Histórico</router-link></li>
+        
+        <li class="logout-item"><a @click.prevent="handleLogout" href="#"><span class="icon">🚪</span> Sair</a></li>
       </ul>
     </nav>
 
-    <main class="main-content">
-      <div class="responder-container">
-        <h1 class="content-title">Histórico de Envios</h1>
-        <p class="desc">Acompanhe o status dos questionários enviados e copie os links.</p>
+    <div class="main-wrapper">
+      <main class="main-content">
+        <div class="content-wrapper">
+          <div class="header-area">
+              <div>
+                  <h1 class="content-title">Histórico e Progresso</h1>
+                  <p class="desc">Monitore as respostas por empresa e setor.</p>
+              </div>
 
-        <div v-if="isLoading" class="loading">Carregando...</div>
-        
-        <div v-else>
-           <table class="history-table">
-            <thead>
-              <tr>
-                <th>Funcionário</th>
-                <th>Questionário</th>
-                <th>Data Envio</th>
-                <th>Status</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in historico" :key="item.id">
-                <td>
-                  <strong>{{ item.nomeFuncionario }}</strong><br>
-                  <span class="email-small">{{ item.emailFuncionario }}</span>
-                </td>
-                <td>{{ item.tituloQuestionario }}</td>
-                <td>{{ formatarData(item.dataEnvio) }}</td>
-                <td>
-                  <span class="status-badge" :class="item.respondido ? 'respondido' : 'pendente'">
-                    {{ item.respondido ? 'Respondido' : 'Pendente' }}
-                  </span>
-                </td>
-                <td>
-                  <button v-if="!item.respondido" class="btn-copy" @click="copiarLink(item.link)">
-                    🔗 Copiar Link
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-           </table>
-           
-           <div v-if="historico.length === 0" class="no-data">
-             Nenhum envio registado.
-           </div>
+              <div v-if="podeFiltrar" class="company-select">
+                  <select v-model="selectedEmpresaId">
+                      <option :value="null" disabled>Selecione uma Empresa</option>
+                      <option v-for="emp in empresas" :key="emp.id" :value="emp.id">
+                          {{ emp.nomeEmpresa }}
+                      </option>
+                  </select>
+              </div>
+          </div>
+
+          <div v-if="isLoading" class="loading">Carregando dados...</div>
+
+          <div v-else>
+              <div v-if="!selectedEmpresaId" class="empty-state">
+                  Selecione uma empresa acima para visualizar o progresso.
+              </div>
+
+              <div v-else>
+                  <div class="summary-card fade-in">
+                      <div class="summary-text">
+                          <h3>Progresso Geral</h3>
+                          <span class="big-number">
+                              {{ estatisticasGerais.respondidos }} <span class="divider">/</span> {{ estatisticasGerais.total }}
+                          </span>
+                          <p>Funcionários responderam</p>
+                      </div>
+                      <div class="circular-chart">
+                          <div class="circle" :style="{ background: `conic-gradient(#3b82f6 ${estatisticasGerais.porcentagem}%, #e0e0e0 0)` }">
+                              <div class="inner-circle">{{ estatisticasGerais.porcentagem }}%</div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <h3 class="section-subtitle">Progresso por Setor</h3>
+                  <div class="sectors-grid fade-in">
+                      <div v-for="setor in progressoPorSetor" :key="setor.nome" class="sector-card">
+                          <div class="sector-header">
+                              <span class="sector-name">{{ setor.nome }}</span>
+                              <span class="sector-stats">{{ setor.respondidos }} / {{ setor.total }}</span>
+                          </div>
+                          <div class="progress-bar-bg">
+                              <div class="progress-bar-fill" :style="{ width: setor.porcentagem + '%' }"></div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <h3 class="section-subtitle">Detalhamento dos Envios</h3>
+                  <table class="history-table fade-in">
+                      <thead>
+                      <tr>
+                          <th>Funcionário / Setor</th>
+                          <th>Questionário</th>
+                          <th>Data Envio</th>
+                          <th>Status</th>
+                          <th v-if="podeVerAcoesTabela">Ações</th>
+                      </tr>
+                      </thead>
+                      <tbody>
+                      <tr v-for="item in historicoFiltrado" :key="item.id">
+                          <td>
+                              <strong>{{ item.nomeFuncionario }}</strong><br>
+                              <span class="small-info">{{ item.setor || 'Sem setor' }} | {{ item.emailFuncionario }}</span>
+                          </td>
+                          <td>{{ item.tituloQuestionario }}</td>
+                          <td>{{ formatarData(item.dataEnvio) }}</td>
+                          <td>
+                              <span class="status-badge" :class="item.respondido ? 'respondido' : 'pendente'">
+                                  {{ item.respondido ? 'Respondido' : 'Pendente' }}
+                              </span>
+                          </td>
+                          <td v-if="podeVerAcoesTabela">
+                              <button v-if="!item.respondido" class="btn-copy" @click="copiarLink(item.link)">🔗 Copiar</button>
+                          </td>
+                      </tr>
+                      </tbody>
+                  </table>
+                  <div v-if="historicoFiltrado.length === 0" class="no-data">
+                      Nenhum envio encontrado para esta empresa.
+                  </div>
+              </div>
+          </div>
+
         </div>
+      </main>
 
-      </div>
-    </main>
+      <AppFooter />
+    </div>
+
   </div>
 </template>
 
 <style scoped>
-/* Reutilizando estilos globais */
-:global(body) { margin: 0; background-color: #f0f2f5; font-family: Arial, sans-serif; }
-.app-layout { display: flex; min-height: 100vh; }
-.sidebar { width: 280px; flex-shrink: 0; background-color: #ffffff; padding: 2rem 1.5rem; border-right: 1px solid #e0e0e0; }
-.sidebar-logo { width: 150px; margin-bottom: 2rem; display: block; margin: 0 auto 2rem auto; }
-.sidebar-nav { list-style: none; padding: 0; margin: 0; }
-.sidebar-nav li { margin-bottom: 0.5rem; }
-.sidebar-nav li.user-display { font-weight: bold; padding: 1rem; border-bottom: 1px solid #eee; display: flex; align-items: center; color: #333; }
-.sidebar-nav a { display: flex; align-items: center; padding: 0.8rem 1rem; border-radius: 6px; text-decoration: none; color: #555; transition: background 0.2s; }
-.sidebar-nav a:hover { background-color: #f0f2f5; }
-.sidebar-nav li.active a { background-color: #e0eafc; color: #3b82f6; font-weight: bold; }
-.sidebar-nav .icon { width: 20px; height: 20px; margin-right: 0.8rem; background-color: #ccc; border-radius: 50%; }
-.logout-item { margin-top: 2rem; }
-.logout-item a { color: #d9534f; font-weight: bold; }
+/* --- FIX DE LAYOUT (Rolagem) --- */
+:global(html), :global(body), :global(#app) {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; 
+}
 
-.main-content { flex: 1; background-color: #333; padding: 2rem; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; }
-.responder-container { max-width: 1000px; width: 100%; padding: 2.5rem 3rem; border-radius: 8px; background-color: #f4f7f6; color: #333; }
-.content-title { font-size: 2rem; color: #333; border-bottom: 4px solid #3b82f6; padding-bottom: 0.5rem; margin-bottom: 1.5rem; display: inline-block; }
-.desc { color: #666; margin-bottom: 2rem; }
-.loading { text-align: center; padding: 3rem; }
-.no-data { text-align: center; padding: 3rem; color: #888; font-style: italic; }
+/* Layout Geral */
+:global(body) { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
 
-/* Tabela de Histórico */
-.history-table { width: 100%; border-collapse: collapse; background-color: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-.history-table th, .history-table td { padding: 1rem; text-align: left; border-bottom: 1px solid #eee; }
-.history-table th { background-color: #f8f9fa; font-weight: bold; color: #555; text-transform: uppercase; font-size: 0.85rem; }
-.email-small { font-size: 0.85rem; color: #777; }
+.app-layout { 
+  display: flex; 
+  height: 100%; 
+  width: 100%; 
+}
 
-.status-badge { padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.85rem; font-weight: bold; color: white; }
-.status-badge.pendente { background-color: #f0ad4e; }
-.status-badge.respondido { background-color: #28a745; }
+/* Sidebar */
+.sidebar { 
+  width: 260px; 
+  background-color: #ffffff; 
+  border-right: 1px solid #e5e7eb; 
+  display: flex; 
+  flex-direction: column; 
+  padding: 1.5rem 1rem; 
+  flex-shrink: 0; 
+  z-index: 10;
+}
+.sidebar-logo { width: 120px; display: block; margin: 0 auto 1.5rem auto; }
+.user-badge { background: #f3f4f6; padding: 0.5rem; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 1.5rem; color: #374151; }
+.sidebar-nav { list-style: none; padding: 0; margin: 0; flex: 1; overflow-y: auto; }
+.sidebar-nav li { margin-bottom: 5px; }
+.sidebar-nav a { display: flex; align-items: center; padding: 0.75rem 1rem; color: #4b5563; text-decoration: none; border-radius: 6px; font-weight: 500; transition: all 0.2s; }
+.sidebar-nav a:hover { background: #f3f4f6; color: #111; }
+.sidebar-nav li.active a { background: #eff6ff; color: #2563eb; font-weight: 600; }
+.sidebar-nav .icon { margin-right: 10px; min-width: 20px; text-align: center; }
+.logout-item { margin-top: auto; border-top: 1px solid #f3f4f6; padding-top: 1rem; }
+.logout-item a { color: #ef4444; }
 
-.btn-copy { padding: 0.4rem 0.8rem; background-color: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; transition: opacity 0.2s; }
-.btn-copy:hover { opacity: 0.8; }
+/* --- MAIN WRAPPER (Novo container flex column) --- */
+.main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh; /* Altura total da viewport */
+  overflow-y: auto; /* Scroll acontece aqui */
+}
+
+/* --- MAIN CONTENT --- */
+.main-content { 
+  flex: 1; /* Empurra o footer para baixo */
+  padding: 2rem; 
+  display: flex; 
+  justify-content: center; 
+  align-items: flex-start;
+  background-color: #f0f2f5;
+}
+
+.content-wrapper { max-width: 1000px; width: 100%; margin: 0 auto; padding-bottom: 3rem; }
+
+.header-area { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; }
+.content-title { font-size: 1.8rem; margin: 0; color: #111; }
+.desc { color: #666; margin: 5px 0 0 0; }
+
+.company-select select { padding: 0.8rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; min-width: 250px; cursor: pointer; background: white; }
+
+.summary-card { background: white; padding: 2rem; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 2rem; }
+.summary-text h3 { margin: 0 0 0.5rem 0; color: #6b7280; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.big-number { font-size: 3rem; font-weight: 800; color: #111; }
+.big-number .divider { color: #d1d5db; font-weight: 400; font-size: 2rem; }
+.circular-chart .circle { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; }
+.circular-chart .inner-circle { width: 60px; height: 60px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.1rem; color: #3b82f6; }
+
+.section-subtitle { font-size: 1.2rem; color: #374151; margin-bottom: 1rem; margin-top: 2rem; }
+.sectors-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.sector-card { background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.sector-header { display: flex; justify-content: space-between; margin-bottom: 0.8rem; font-weight: 600; color: #374151; }
+.progress-bar-bg { background: #f3f4f6; height: 10px; border-radius: 5px; overflow: hidden; }
+.progress-bar-fill { background: #3b82f6; height: 100%; transition: width 0.5s ease; }
+
+.history-table { width: 100%; border-collapse: separate; border-spacing: 0; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 2rem; }
+.history-table th { background: #f9fafb; padding: 1rem; text-align: left; font-size: 0.85rem; color: #6b7280; text-transform: uppercase; font-weight: 600; border-bottom: 1px solid #e5e7eb; }
+.history-table td { padding: 1rem; border-bottom: 1px solid #f3f4f6; color: #4b5563; }
+.small-info { font-size: 0.85rem; color: #9ca3af; }
+.status-badge { padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+.status-badge.respondido { background: #dcfce7; color: #166534; }
+.status-badge.pendente { background: #fef3c7; color: #92400e; }
+.btn-copy { background: none; border: 1px solid #d1d5db; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; color: #374151; font-size: 0.85rem; }
+.btn-copy:hover { background: #f3f4f6; border-color: #9ca3af; }
+.no-data { text-align: center; padding: 2rem; color: #888; }
+
+.empty-state { text-align: center; padding: 4rem; background: white; border-radius: 12px; color: #6b7280; border: 2px dashed #e5e7eb; }
+.loading { text-align: center; padding: 3rem; color: #6b7280; }
+.fade-in { animation: fadeIn 0.4s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Responsivo */
+@media (max-width: 768px) {
+  .app-layout { flex-direction: column; overflow: auto; }
+  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #e5e7eb; padding: 1rem; }
+  .main-wrapper { height: auto; overflow-y: visible; }
+  .content-wrapper { padding: 1.5rem; }
+}
 </style>

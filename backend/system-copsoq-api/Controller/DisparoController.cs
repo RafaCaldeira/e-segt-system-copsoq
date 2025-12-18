@@ -4,27 +4,26 @@ using Microsoft.EntityFrameworkCore;
 using system_copsoq_api.Data;
 using system_copsoq_api.DTOs;
 using system_copsoq_api.Models;
-using system_copsoq_api.Services; // <-- Importante para o IEmailService
+using system_copsoq_api.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Security.Claims;
 
-// Alias para evitar conflito de nomes
+// Alias para evitar conflito de nomes entre Model e Namespace
 using DisparoModel = system_copsoq_api.Models.Disparo.Disparo;
 
 namespace system_copsoq_api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin, Psicologo")] // Permite que logados acessem (Admin, Psicologo, Cliente)
     public class DisparoController : ControllerBase
     {
         private readonly AppDbContext _context;
-        private readonly IEmailService _emailService; // <-- 1. Serviço Injetado
+        private readonly IEmailService _emailService;
 
-        // 2. Construtor Atualizado
         public DisparoController(AppDbContext context, IEmailService emailService)
         {
             _context = context;
@@ -33,33 +32,27 @@ namespace system_copsoq_api.Controllers
 
         // POST: api/disparo
         [HttpPost]
+        [Authorize(Roles = "Admin, Psicologo")] // Apenas Admin e Psicologo podem disparar
         public async Task<IActionResult> CreateDisparos([FromBody] DisparoCreateDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            // 1. Validar Questionário
+            // 1. Validações
             var questionario = await _context.Questionarios.FindAsync(dto.QuestionarioID);
             if (questionario == null) return NotFound("Questionário não encontrado.");
 
-            // 2. Validar Funcionários
             var funcionarios = await _context.Funcionarios
                 .Where(f => dto.FuncionarioIDs.Contains(f.ID))
                 .ToListAsync();
 
             if (!funcionarios.Any()) return BadRequest("Nenhum funcionário encontrado.");
-            
-            // Validação extra: verificar se todos pertencem à mesma empresa (opcional, mas recomendado)
-            if (funcionarios.Select(f => f.EmpresaID).Distinct().Count() > 1)
-            {
-                 return BadRequest("Selecione funcionários de uma única empresa por vez.");
-            }
 
+            // 2. Preparar Lista
             var novosDisparos = new List<DisparoModel>();
-            var emailsEnviados = 0;
 
             foreach (var funcionario in funcionarios)
             {
-                // Verifica se já existe um disparo pendente para evitar spam
+                // Evita duplicidade de envio pendente
                 bool jaExiste = await _context.Disparos
                     .AnyAsync(d => d.QuestionarioID == dto.QuestionarioID && 
                                    d.FuncionarioID == funcionario.ID && 
@@ -67,92 +60,129 @@ namespace system_copsoq_api.Controllers
                 
                 if (jaExiste) continue;
 
-                // Cria o novo disparo
                 var novoDisparo = new DisparoModel
                 {
                     QuestionarioID = dto.QuestionarioID,
                     FuncionarioID = funcionario.ID,
                     DataEnvio = DateTime.UtcNow,
-                    TokenAcesso = Guid.NewGuid(), // O Token Único
+                    TokenAcesso = Guid.NewGuid(),
                     Respondido = false
                 };
+                
                 novosDisparos.Add(novoDisparo);
+            }
 
-                // 3. ENVIAR O E-MAIL
+            if (!novosDisparos.Any()) 
+                return Ok(new { Message = "Nenhum novo disparo criado. Todos já possuem pendências." });
+
+            // 3. Salvar no Banco
+            _context.Disparos.AddRange(novosDisparos);
+            await _context.SaveChangesAsync();
+
+            // 4. Enviar E-mails
+            int emailsEnviados = 0;
+            var errosEmail = new List<string>();
+
+            foreach (var disparo in novosDisparos)
+            {
+                var funcionario = funcionarios.First(f => f.ID == disparo.FuncionarioID);
+
                 try 
                 {
-                    // Link para o Front-end (Ajuste a porta se o seu Vue estiver noutra, ex: 5173)
-                    string link = $"http://localhost:5173/responder/{novoDisparo.TokenAcesso}";
-
-                    string assunto = $"Convite para Avaliação: {questionario.Titulo}";
-                    
+                    // Ajuste a porta se necessário (ex: 5173 para Vite/Vue)
+                    string link = $"http://localhost:5173/responder/{disparo.TokenAcesso}";
+                    string assunto = $"Convite: {questionario.Titulo}";
                     string corpoEmail = $@"
-                        <div style='font-family: Arial, sans-serif; color: #333;'>
-                            <h2>Olá, {funcionario.Nome}!</h2>
-                            <p>A sua empresa convidou-o a participar na avaliação: <strong>{questionario.Titulo}</strong>.</p>
-                            <p>As suas respostas são confidenciais e ajudarão a melhorar o ambiente de trabalho.</p>
-                            <br>
-                            <a href='{link}' style='background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;'>ACESSAR QUESTIONÁRIO</a>
-                            <br><br>
-                            <p style='font-size: 0.9em; color: #666;'>Se o botão não funcionar, copie e cole este link no seu navegador:</p>
-                            <p style='font-size: 0.9em; color: #666;'>{link}</p>
-                        </div>
-                    ";
+                        <h2>Olá, {funcionario.Nome}</h2>
+                        <p>Você tem um novo formulário disponível.</p>
+                        <a href='{link}'>Clique aqui para responder</a>";
 
-                    // Envia o email (await aqui para garantir que sai)
                     await _emailService.SendEmailAsync(funcionario.Email, assunto, corpoEmail);
                     emailsEnviados++;
                 }
                 catch (Exception ex)
                 {
-                    // Se falhar o envio, registamos o erro mas continuamos (o disparo é salvo no banco na mesma)
-                    Console.WriteLine($"[ERRO EMAIL] Falha ao enviar para {funcionario.Email}: {ex.Message}");
+                    errosEmail.Add($"Erro ao enviar para {funcionario.Email}: {ex.Message}");
                 }
             }
 
-            if (!novosDisparos.Any()) return Ok("Nenhum novo disparo necessário (todos já têm envios pendentes).");
-
-            // 4. Salvar no Banco
-            _context.Disparos.AddRange(novosDisparos);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { Message = $"{novosDisparos.Count} disparos criados e {emailsEnviados} e-mails enviados com sucesso." });
+            return Ok(new 
+            { 
+                Message = $"Processo concluído. {novosDisparos.Count} formulários gerados.",
+                EmailsSucesso = emailsEnviados,
+                Erros = errosEmail
+            });
         }
 
         // GET: api/disparo/historico
         [HttpGet("historico")]
         public async Task<ActionResult<IEnumerable<DisparoHistoricoDto>>> GetHistorico()
         {
-             var userEmail = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var user = await _context.Usuarios.FirstOrDefaultAsync(u => u.Email == userEmail);
-            if (user == null) return Unauthorized();
-
-            var query = _context.Disparos
-                .Include(d => d.Funcionario)
-                .Include(d => d.Questionario)
-                .AsQueryable();
-
-            if (user.Role == Role.Cliente)
+            try 
             {
-                query = query.Where(d => d.Funcionario.EmpresaID == user.EmpresaID);
-            }
+                // Identifica quem está logado
+                var userEmail = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var user = await _context.Usuarios.FirstOrDefaultAsync(u => u.Email == userEmail);
+                
+                // Se não achar usuário ou role, bloqueia (segurança extra)
+                if (user == null) return Unauthorized();
 
-            var historico = await query
-                .OrderByDescending(d => d.DataEnvio)
-                .Select(d => new DisparoHistoricoDto
+                // Monta a Query Base
+                var query = _context.Disparos
+                    .Include(d => d.Funcionario)
+                    .Include(d => d.Questionario)
+                    .AsQueryable();
+
+                // SE FOR CLIENTE: Filtra apenas a empresa dele
+                if (user.Role == Role.Cliente)
                 {
-                    Id = d.ID,
-                    NomeFuncionario = d.Funcionario.Nome,
-                    EmailFuncionario = d.Funcionario.Email,
-                    TituloQuestionario = d.Questionario.Titulo,
-                    DataEnvio = d.DataEnvio,
-                    Respondido = d.Respondido,
-                    DataResposta = d.DataResposta,
-                    Link = d.TokenAcesso.ToString() 
+                    query = query.Where(d => d.Funcionario.EmpresaID == user.EmpresaID);
+                }
+
+                // Projeta o resultado (Aqui incluímos o Setor e EmpresaId)
+                var historico = await query
+                    .OrderByDescending(d => d.DataEnvio)
+                    .Select(d => new DisparoHistoricoDto
+                    {
+                        Id = d.ID,
+                        NomeFuncionario = d.Funcionario.Nome,
+                        EmailFuncionario = d.Funcionario.Email,
+                        TituloQuestionario = d.Questionario.Titulo,
+                        DataEnvio = d.DataEnvio,
+                        Respondido = d.Respondido,
+                        // DataResposta = d.DataResposta, // Descomente se tiver no DTO
+                        Link = d.TokenAcesso.ToString(), // CORREÇÃO: É TokenAcesso, não Token
+
+                        // NOVOS CAMPOS PARA O GRÁFICO:
+                        Setor = d.Funcionario.Setor,
+                        EmpresaId = d.Funcionario.EmpresaID
+                    })
+                    .ToListAsync();
+
+                return Ok(historico);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erro interno: {ex.Message}");
+            }
+        }
+
+        [Authorize(Roles = "Psicologo, Admin")]
+        [HttpGet("funcionario/{funcionarioId}/disparos")]
+        public async Task<IActionResult> GetDisparosDoFuncionario(int funcionarioId)
+        {
+            var disparos = await _context.Disparos
+                .Where(d => d.FuncionarioID == funcionarioId)
+                .Select(d => new {
+                    d.ID,
+                    d.DataEnvio,
+                    d.DataResposta,
+                    d.Respondido,
+                    Questionario = d.Questionario.Titulo
                 })
                 .ToListAsync();
 
-            return Ok(historico);
+            return Ok(disparos);
         }
     }
 }

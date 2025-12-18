@@ -4,6 +4,8 @@ import { useUserStore } from '../store/user';
 import { apiService } from '../services/api.service';
 import type { Funcionario } from '../types/funcionario.types';
 import { useRouter } from 'vue-router';
+// 1. IMPORTAR O FOOTER
+import AppFooter from '../components/AppFooter.vue';
 
 const userStore = useUserStore();
 const router = useRouter();
@@ -18,19 +20,15 @@ const importErrors = ref<string[]>([]);
 
 // Pesquisa e filtro
 const search = ref('');
-const setorFiltro = ref(''); // "" = todos
-
-// Estado do Modal de Cadastro Manual (Simplificado)
-//const showModal = ref(false);
-//const novoFuncionario = ref({ nome: '', email: '', cargo: '', setor: '', cpf: '', telefone: '' });
+const setorFiltro = ref('');
 
 // --- Lógica da Sidebar ---
 function handleLogout() { userStore.logout(); router.push('/login'); }
-const displayName = computed(() => userStore.nomeEmpresa || userStore.userRole);
+const displayName = computed(() => userStore.nomeEmpresa || userStore.userRole || "Usuário");
 
 // --- Carregamento Inicial ---
 onMounted(async () => {
-  if (!userStore.isLoggedIn || !userStore.isCliente) {
+  if (!userStore.isLoggedIn) { 
     router.push('/login');
     return;
   }
@@ -39,16 +37,21 @@ onMounted(async () => {
 
 async function carregarFuncionarios() {
   isLoading.value = true;
-  const data = await apiService.getFuncionarios();
-  if (data) {
-    funcionarios.value = data;
-  } else {
-    errorMessage.value = "Erro ao carregar lista.";
+  try {
+    const data = await apiService.getFuncionarios();
+    if (data) {
+      funcionarios.value = data;
+    } else {
+      errorMessage.value = "Não foi possível carregar a lista de funcionários.";
+    }
+  } catch (error) {
+    errorMessage.value = "Erro de conexão ao buscar funcionários.";
+  } finally {
+    isLoading.value = false;
   }
-  isLoading.value = false;
 }
 
-// --- Computeds: lista filtrada e lista de setores ---
+// --- Computeds: Filtros ---
 const funcionariosFiltrados = computed(() => {
   const q = search.value.trim().toLowerCase();
   return funcionarios.value.filter(f => {
@@ -85,214 +88,354 @@ async function handleFileUpload(event: Event) {
   successMessage.value = null;
   importErrors.value = [];
 
-  const result = await apiService.importarFuncionariosCsv(file);
+  try {
+    const result = await apiService.importarFuncionariosCsv(file);
 
-  if (result?.success) {
-    successMessage.value = result.message ?? 'Importação concluída.';
-    if (result.erros && result.erros.length > 0) {
-      importErrors.value = result.erros;
+    if (result?.success) {
+      successMessage.value = result.message ?? 'Importação concluída com sucesso.';
+      if (result.erros && result.erros.length > 0) {
+        importErrors.value = result.erros;
+      }
+      await carregarFuncionarios();
+    } else {
+      errorMessage.value = result?.message ?? 'Falha na importação do arquivo.';
     }
-    await carregarFuncionarios();
-  } else {
-    errorMessage.value = result?.message ?? 'Erro na importação.';
+  } catch (e) {
+    errorMessage.value = "Erro ao enviar arquivo.";
+  } finally {
+    isImporting.value = false;
+    target.value = ''; 
   }
-
-  isImporting.value = false;
-  // limpa input para permitir re-upload do mesmo arquivo
-  target.value = '';
 }
 
-// --- Download Modelo CSV ---
-function baixarModeloCsv() {
-  const csvContent = "Nome;Email;Telefone;Cargo;Setor;CPF\nJoao Silva;joao@email.com;1199999999;Operador;Producao;12345678900";
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  link.href = url;
-  link.download = "modelo_funcionarios.csv";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
-
-// --- Navegação para criação/edição ---
+// --- Navegação ---
 function irParaCadastroManual() {
-  // caminho sugerido: /funcionarios/novo
-  router.push('/novo-funcionario');
+  router.push('/novo-funcionario'); 
 }
 
+// --- CORREÇÃO AQUI (Para bater com sua rota) ---
 function editarFuncionario(id: number) {
-  // caminho sugerido: /funcionarios/editar/:id
-  router.push({ name: 'EditarFuncionario', params: { id: id } });
+  // Opção 1: Usando o nome da rota (Mais seguro)
+  // router.push({ name: 'EditarFuncionario', params: { id: id } });
+  
+  // Opção 2: Usando o caminho exato que você definiu
+  router.push(`/editarFuncionario/${id}`);
 }
 
-// --- Excluir funcionário ---
 async function excluirFuncionario(id: number) {
-  const ok = confirm('Deseja realmente excluir este funcionário?');
-  if (!ok) return;
+  if (!confirm('Tem certeza que deseja remover este colaborador?')) return;
 
   try {
     const res = await apiService.deleteFuncionario(id);
-
-    if (ok) {
-      alert("Funcionário deletado com sucesso!");
-      carregarFuncionarios(); // se existir
+    if (res) {
+      successMessage.value = "Funcionário removido.";
+      await carregarFuncionarios();
     } else {
-      alert("Erro ao deletar funcionário.");
+      errorMessage.value = "Erro ao remover funcionário.";
     }
-
   } catch (err) {
-      alert('Erro ao excluir funcionário.');
+    errorMessage.value = 'Erro de conexão ao excluir.';
   }
 }
 </script>
 
 <template>
   <div class="app-layout">
+    
     <nav class="sidebar">
-      <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      <div class="logo-area">
+        <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      </div>
+      
+      <div class="user-badge">{{ displayName }}</div>
+
       <ul class="sidebar-nav">
-        <li class="user-display"><span class="icon"></span> {{ displayName }}</li>
-        <li class="active"><a href="#"><span class="icon"></span> Editar Cadastro</a></li>
-        <li><router-link to="/plano-de-acao"><span class="icon"></span> Plano de ação</router-link></li>
-        <li><router-link to="/relatorio"><span class="icon"></span> Relatórios</router-link></li>
-        <li><a href="#"><span class="icon"></span> Baixar Roadmap</a></li>
-        <li><a href="#"><span class="icon"></span> Histórico</a></li>
-        <li class="logout-item"><a @click="handleLogout" href="#"><span class="icon icon-logout"></span> Sair</a></li>
+        <li v-if="userStore.isAdmin">
+          <router-link to="/criar-questionario"><span class="icon">📝</span> Criar Questionário</router-link>
+        </li>
+        <li v-if="userStore.isAdmin">
+          <router-link to="/disparo"><span class="icon">📨</span> Enviar Questionário</router-link>
+        </li>
+
+        <li v-if="userStore.isCliente">
+            <router-link to="/editar-cadastro"><span class="icon">⚙️</span> Editar Cadastro</router-link>
+        </li>
+        <li v-if="userStore.isCliente" class="active">
+            <router-link to="/funcionario"><span class="icon">👥</span> Funcionários</router-link>
+        </li>
+
+        <li v-if="userStore.userRole === 'Psicologo'">
+            <router-link to="/psicologo"><span class="icon">🧠</span> Área do Psicólogo</router-link>
+        </li>
+
+        <li><router-link to="/plano-de-acao"><span class="icon">📋</span> Plano de Ação</router-link></li>
+        <li><router-link to="/relatorio"><span class="icon">📊</span> Relatórios</router-link></li>
+        <li><router-link to="/historico"><span class="icon">📜</span> Histórico</router-link></li>
+        
+        <li class="logout-item"><a @click.prevent="handleLogout" href="#"><span class="icon">🚪</span> Sair</a></li>
       </ul>
     </nav>
 
-    <main class="main-content">
-      <div class="responder-container">
-        <h1 class="content-title">Gestão de Funcionários</h1>
-        <p>Gerencie os colaboradores que participarão nas avaliações.</p>
-
-        <!-- Área de Ações (Importar, Filtro, Adicionar) -->
-        <div class="actions-bar">
-          <div class="left-actions">
-            <div class="import-wrapper">
-              <input type="file" id="csvUpload" @change="handleFileUpload" accept=".csv" :disabled="isImporting" hidden>
-              <label for="csvUpload" class="btn-secondary" :class="{ 'disabled': isImporting }">
-                <span v-if="isImporting">A importar...</span>
-                <span v-else>📂 Importar CSV</span>
-              </label>
-              <button @click="baixarModeloCsv" class="btn-link-small">Baixar Modelo</button>
+    <div class="main-wrapper">
+      <main class="main-content">
+        <div class="content-wrapper">
+          
+          <header class="page-header">
+            <div>
+              <h1 class="content-title">Gestão de Colaboradores</h1>
+              <p class="subtitle">Adicione, edite ou importe a lista de funcionários para as avaliações.</p>
             </div>
+            
+            <button @click="irParaCadastroManual" class="btn-primary">
+              + Novo Funcionário
+            </button>
+          </header>
 
-            <!-- Barra de pesquisa -->
-            <div class="search-wrapper">
-              <input v-model="search" placeholder="Pesquisar por nome, cargo ou setor..." class="search-input" />
-            </div>
+          <div v-if="successMessage" class="alert success fade-in">
+            ✅ {{ successMessage }}
+            <ul v-if="importErrors.length > 0" class="warning-list">
+              <li v-for="err in importErrors" :key="err">{{ err }}</li>
+            </ul>
+          </div>
+          <div v-if="errorMessage" class="alert error fade-in">
+            ⚠️ {{ errorMessage }}
+          </div>
 
-            <!-- Seletor de setor -->
-            <div class="filter-wrapper">
-              <select v-model="setorFiltro" class="select-setor">
-                <option value="">Todos os setores</option>
+          <div class="toolbar">
+            <div class="filters">
+              <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input v-model="search" placeholder="Buscar por nome, cargo..." class="search-input" />
+              </div>
+
+              <select v-model="setorFiltro" class="select-filter">
+                <option value="">Todos os Setores</option>
                 <option v-for="s in setoresUnicos" :key="s" :value="s">{{ s }}</option>
               </select>
             </div>
+
+            <div class="import-actions">
+              <input type="file" id="csvUpload" @change="handleFileUpload" accept=".csv" :disabled="isImporting" hidden>
+              <label for="csvUpload" class="btn-outline" :class="{ 'disabled': isImporting }">
+                {{ isImporting ? '⏳ Importando...' : '📂 Importar CSV' }}
+              </label>
+            </div>
           </div>
 
-          <div class="right-actions">
-            <button @click="irParaCadastroManual" class="btn-continuar">+ Novo Funcionário</button>
+          <div v-if="isLoading" class="loading-state">
+            <div class="spinner"></div> Carregando lista...
           </div>
+
+          <div v-else class="table-card">
+            <div class="table-responsive">
+              <table class="styled-table">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Email</th>
+                    <th>Cargo</th>
+                    <th>Setor</th>
+                    <th>CPF</th>
+                    <th class="text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="func in funcionariosFiltrados" :key="func.id">
+                    <td class="fw-bold">{{ func.nome }}</td>
+                    <td>{{ func.email }}</td>
+                    <td>{{ func.cargo }}</td>
+                    <td><span class="badge">{{ func.setor }}</span></td>
+                    <td class="mono">{{ func.cpf || '-' }}</td>
+                    <td class="text-center actions-cell">
+                      <button class="btn-icon edit" @click="editarFuncionario(func.id)" title="Editar">✏️</button>
+                      <button class="btn-icon delete" @click="excluirFuncionario(func.id)" title="Excluir">🗑️</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-if="funcionariosFiltrados.length === 0" class="empty-state">
+              <p>Nenhum funcionário encontrado.</p>
+            </div>
+          </div>
+
         </div>
+      </main>
 
-        <!-- Feedback de Sucesso/Erro -->
-        <div v-if="successMessage" class="success-message">
-          {{ successMessage }}
-          <ul v-if="importErrors.length > 0" class="warning-list">
-            <li v-for="err in importErrors" :key="err">{{ err }}</li>
-          </ul>
-        </div>
-        <div v-if="errorMessage" class="error-message">{{ errorMessage }}</div>
+      <AppFooter />
+    </div>
 
-        <!-- Tabela de Funcionários -->
-        <div v-if="isLoading" class="loading">Carregando...</div>
-
-        <table v-else class="funcionarios-tabela">
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>Email</th>
-              <th>Cargo</th>
-              <th>Setor</th>
-              <th>CPF</th>
-              <th style="width: 160px">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="func in funcionariosFiltrados" :key="func.id">
-              <td>{{ func.nome }}</td>
-              <td>{{ func.email }}</td>
-              <td>{{ func.cargo }}</td>
-              <td>{{ func.setor }}</td>
-              <td>{{ func.cpf || '-' }}</td>
-              <td>
-                <button class="btn-acao" @click="editarFuncionario(func.id)">Editar</button>
-                <button class="btn-acao btn-perigo" @click="excluirFuncionario(func.id)">Excluir</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div v-if="!isLoading && funcionariosFiltrados.length === 0" class="no-data">
-          Nenhum funcionário encontrado. Ajuste a pesquisa / filtro ou importe um CSV.
-        </div>
-      </div>
-    </main>
   </div>
 </template>
 
 <style scoped>
-:global(body) { margin: 0; background-color: #f0f2f5; font-family: Arial, sans-serif; }
-.app-layout { display: flex; min-height: 100vh; }
-.sidebar { width: 280px; flex-shrink: 0; background-color: #ffffff; padding: 2rem 1.5rem; border-right: 1px solid #e0e0e0; }
-.sidebar-logo { width: 150px; margin-bottom: 2rem; display: block; margin: 0 auto 2rem auto; }
-.sidebar-nav { list-style: none; padding: 0; margin: 0; }
-.sidebar-nav li { margin-bottom: 0.5rem; }
-.sidebar-nav li.user-display { font-weight: bold; padding: 1rem; border-bottom: 1px solid #eee; display: flex; align-items: center; color: #333; }
-.sidebar-nav a { display: flex; align-items: center; padding: 0.8rem 1rem; border-radius: 6px; text-decoration: none; color: #555; transition: background 0.2s; }
-.sidebar-nav a:hover { background-color: #f0f2f5; }
-.sidebar-nav li.active a { background-color: #e0eafc; color: #3b82f6; font-weight: bold; }
-.sidebar-nav .icon { width: 20px; height: 20px; margin-right: 0.8rem; background-color: #ccc; border-radius: 50%; }
-.logout-item { margin-top: 2rem; }
-.logout-item a { color: #d9534f; font-weight: bold; }
+/* --- FIX DE LAYOUT (Rolagem) --- */
+:global(html), :global(body), :global(#app) {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; 
+}
 
-.main-content { flex: 1; background-color: #333; padding: 2rem; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; }
-.responder-container { max-width: 1000px; width: 100%; padding: 2.5rem 3rem; border-radius: 8px; background-color: #f4f7f6; color: #333; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-.content-title { font-size: 2rem; color: #333; border-bottom: 4px solid #3b82f6; padding-bottom: 0.5rem; margin-bottom: 1.5rem; display: inline-block; }
+/* Layout Geral */
+:global(body) { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
 
-/* Ações */
-.actions-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; background-color: #fff; padding: 0.75rem; border-radius: 8px; border: 1px solid #ddd; gap: 1rem; }
-.left-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-.right-actions { display: flex; align-items: center; gap: 0.5rem; }
+.app-layout { 
+  display: flex; 
+  height: 100%; 
+  width: 100%; 
+}
 
-/* Import */
-.import-wrapper { display: flex; align-items: center; gap: 0.5rem; }
+/* Sidebar */
+.sidebar { 
+  width: 260px; 
+  background-color: #ffffff; 
+  border-right: 1px solid #e5e7eb; 
+  display: flex; 
+  flex-direction: column; 
+  padding: 1.5rem 1rem; 
+  flex-shrink: 0; 
+  z-index: 10;
+}
+.sidebar-logo { width: 120px; display: block; margin: 0 auto 1.5rem auto; }
+.user-badge { background: #f3f4f6; padding: 0.5rem; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 1.5rem; color: #374151; }
+.sidebar-nav { list-style: none; padding: 0; margin: 0; flex: 1; overflow-y: auto; }
+.sidebar-nav li { margin-bottom: 5px; }
+.sidebar-nav a { display: flex; align-items: center; padding: 0.75rem 1rem; color: #4b5563; text-decoration: none; border-radius: 6px; font-weight: 500; transition: all 0.2s; }
+.sidebar-nav a:hover { background: #f3f4f6; color: #111; }
+.sidebar-nav li.active a { background: #eff6ff; color: #2563eb; font-weight: 600; }
+.sidebar-nav .icon { margin-right: 10px; min-width: 20px; text-align: center; }
+.logout-item { margin-top: auto; border-top: 1px solid #f3f4f6; padding-top: 1rem; }
+.logout-item a { color: #ef4444; }
 
-/* Search / Filter */
-.search-input { padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid #ddd; min-width: 260px; }
-.select-setor { padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid #ddd; }
+/* --- MAIN WRAPPER (Novo container flex column) --- */
+.main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh; /* Altura total da viewport */
+  overflow-y: auto; /* Scroll acontece aqui */
+}
 
-/* Botões */
-.btn-continuar { padding: 0.6rem 1rem; cursor: pointer; border: none; border-radius: 6px; font-weight: bold; background-color: #3b82f6; color: white; transition: background 0.2s; }
-.btn-continuar:hover { background-color: #2563eb; }
-.btn-secondary { padding: 0.5rem 0.9rem; cursor: pointer; border: 1px solid #3b82f6; border-radius: 6px; font-weight: bold; background-color: white; color: #3b82f6; display: inline-block; transition: background 0.2s; }
-.btn-secondary:hover { background-color: #e0eafc; }
-.btn-secondary.disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-link-small { background: none; border: none; color: #666; text-decoration: underline; cursor: pointer; font-size: 0.9rem; }
+/* --- MAIN CONTENT --- */
+.main-content { 
+  flex: 1; /* Empurra o footer para baixo */
+  padding: 2rem; 
+  display: flex; 
+  justify-content: center; 
+  align-items: flex-start;
+  background-color: #f0f2f5;
+}
 
-/* Mensagens */
-.success-message { background-color: #d1e7dd; color: #0f5132; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
-.error-message { background-color: #f8d7da; color: #842029; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
-.warning-list { margin-top: 0.5rem; font-size: 0.9rem; color: #664d03; }
+.content-wrapper { 
+  max-width: 1100px; 
+  width: 100%; 
+  background: white; 
+  padding: 2.5rem;
+  border-radius: 12px; 
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); 
+  margin-bottom: 2rem;
+}
 
-/* Tabela */
-.funcionarios-tabela { width: 100%; border-collapse: collapse; margin-top: 0.5rem; background-color: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-.funcionarios-tabela th, .funcionarios-tabela td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #eee; vertical-align: middle; }
-.funcionarios-tabela th { background-color: #f8f9fa; font-weight: bold; color: #555; text-transform: uppercase; font-size: 0.8rem; }
-.btn-acao { padding: 0.35rem 0.7rem; margin-right: 0.5rem; border: none; border-radius: 4px; cursor: pointer; background-color: #e0eafc; color: #3b82f6; font-weight: bold; font-size: 0.85rem; }
-.btn-perigo { background-color: #fee2e2; color: #dc2626; }
-.no-data { text-align: center; padding: 2.5rem; color: #888; font-style: italic; }
+/* Header */
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid #eee; padding-bottom: 1rem; flex-wrap: wrap; gap: 1rem; }
+.content-title { font-size: 1.8rem; color: #1f2937; margin: 0; }
+.subtitle { color: #6b7280; margin: 5px 0 0 0; }
+
+.btn-primary { padding: 0.75rem 1.5rem; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); }
+.btn-primary:hover { background: #1d4ed8; transform: translateY(-1px); }
+
+/* Toolbar */
+.toolbar {
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  background: #f8fafc; 
+  padding: 1.2rem; 
+  border-radius: 8px; 
+  border: 1px solid #e2e8f0; 
+  margin-bottom: 1.5rem; 
+  flex-wrap: wrap; 
+  gap: 1.5rem; 
+}
+
+.filters { 
+  display: flex; 
+  gap: 15px; 
+  flex: 1; 
+  min-width: 300px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.search-box { position: relative; flex-grow: 1; min-width: 200px; }
+.search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; }
+
+.search-input { 
+  width: 100%; 
+  padding: 0.7rem 0.7rem 0.7rem 2.5rem; 
+  border: 1px solid #cbd5e1; 
+  border-radius: 6px; 
+  font-size: 0.95rem; 
+  transition: border-color 0.2s; 
+  box-sizing: border-box;
+}
+.search-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+
+.select-filter { 
+  padding: 0.7rem; 
+  border: 1px solid #cbd5e1; 
+  border-radius: 6px; 
+  background: white; 
+  cursor: pointer; 
+  min-width: 180px; 
+  font-size: 0.95rem; 
+}
+
+.import-actions { display: flex; align-items: center; gap: 1rem; }
+.btn-outline { padding: 0.7rem 1.2rem; border: 1px solid #cbd5e1; color: #475569; background: white; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; display: inline-flex; align-items: center; }
+.btn-outline:hover { background: #f1f5f9; border-color: #94a3b8; color: #1e293b; }
+.btn-outline.disabled { opacity: 0.6; cursor: wait; }
+
+/* Table */
+.table-card { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+.table-responsive { overflow-x: auto; }
+.styled-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.styled-table thead tr { background-color: #f8fafc; text-align: left; }
+.styled-table th { padding: 1rem 1.2rem; font-weight: 600; color: #475569; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0; }
+.styled-table td { padding: 1rem 1.2rem; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: middle; }
+.styled-table tbody tr:last-child td { border-bottom: none; }
+.styled-table tbody tr:hover { background-color: #f8fafc; }
+
+.badge { background: #e0f2fe; color: #0284c7; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; border: 1px solid #bae6fd; }
+.fw-bold { font-weight: 600; color: #1e293b; }
+.mono { font-family: 'Consolas', monospace; color: #64748b; font-size: 0.9rem; }
+.text-center { text-align: center; }
+
+.actions-cell { white-space: nowrap; }
+.btn-icon { background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 6px; transition: transform 0.2s, background 0.2s; border-radius: 4px; }
+.btn-icon:hover { transform: scale(1.1); background: #f1f5f9; }
+.edit { color: #f59e0b; }
+.delete { color: #ef4444; }
+
+/* Feedback */
+.alert { padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.alert.success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+.alert.error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.warning-list { margin: 0; padding-left: 1.2rem; font-size: 0.9rem; color: #92400e; }
+
+.loading-state, .empty-state { text-align: center; padding: 4rem; color: #64748b; background: #f9fafb; border-radius: 8px; border: 1px dashed #e2e8f0; margin-top: 1rem; }
+.spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 10px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.fade-in { animation: fadeIn 0.3s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Responsivo */
+@media (max-width: 768px) {
+  .app-layout { flex-direction: column; overflow: auto; }
+  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #e5e7eb; padding: 1rem; }
+  .main-wrapper { height: auto; overflow-y: visible; }
+}
 </style>

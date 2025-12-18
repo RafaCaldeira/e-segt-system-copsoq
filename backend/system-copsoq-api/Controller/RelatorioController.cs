@@ -80,9 +80,12 @@ namespace system_copsoq_api.Controllers
                 return NotFound("Nenhuma resposta individual encontrada.");
             }
 
+            var empresa = await _context.Empresas.FindAsync(empresaId);
+
             // --- 4. O "Motor" de Cálculo ---
             var relatorio = new RelatorioCompletoDto
             {
+                NomeEmpresa = empresa != null ? empresa.NomeEmpresa : "Empresa Desconhecida", // <--- Preencher aqui
                 TituloQuestionario = questionario.Titulo,
                 TotalRespondentes = disparosRespondidosIds.Count,
                 DataGeracaoRelatorio = DateTime.UtcNow,
