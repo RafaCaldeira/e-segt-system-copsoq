@@ -1,34 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
-import { useUserStore } from '../store/user';
+import { ref, onMounted } from 'vue'; // Removido computed, useUserStore, useRouter daqui pois foi para a sidebar
 import { apiService } from '../services/api.service';
-import { useRouter } from 'vue-router';
-// 1. IMPORTAR O FOOTER
 import AppFooter from '../components/AppFooter.vue';
+import AppSidebar from '../components/AppSidebar.vue'; // <--- 1. IMPORTAR
 
 // --- TIPOS ---
-interface QuestionarioResumoDto {
-  titulo: string;
-  dataResposta: string;
-  tokenAcesso: string;
-}
-
-interface FuncionarioListaDto {
-  id: number;
-  nome: string;
-  cargo: string;
-  questionariosRespondidos: QuestionarioResumoDto[];
-}
-
-interface EmpresaSimplesDto {
-  id: number;
-  nomeEmpresa: string;
-  setorAtuacao: string;
-}
+interface QuestionarioResumoDto { titulo: string; dataResposta: string; tokenAcesso: string; }
+interface FuncionarioListaDto { id: number; nome: string; cargo: string; questionariosRespondidos: QuestionarioResumoDto[]; }
+interface EmpresaSimplesDto { id: number; nomeEmpresa: string; setorAtuacao: string; }
 
 // --- CONFIG ---
-const userStore = useUserStore();
-const router = useRouter();
 const API_URL = 'http://localhost:5258'; 
 
 // --- ESTADO ---
@@ -39,8 +20,6 @@ const funcionarios = ref<FuncionarioListaDto[]>([]);
 const selectedEmpresa = ref<EmpresaSimplesDto | null>(null);
 const showModal = ref(false);
 const funcionarioSelecionado = ref<FuncionarioListaDto | null>(null);
-
-const displayName = computed(() => userStore.userRole || 'Usuário');
 
 // --- CICLO DE VIDA ---
 onMounted(async () => {
@@ -83,11 +62,6 @@ function voltarParaEmpresas() {
   funcionarios.value = [];
 }
 
-function handleLogout() { 
-  userStore.logout(); 
-  router.push('/login'); 
-}
-
 function abrirHistorico(func: FuncionarioListaDto) {
   funcionarioSelecionado.value = func;
   showModal.value = true;
@@ -101,19 +75,7 @@ function fecharModal() {
 
 <template>
   <div class="app-layout">
-    <nav class="sidebar">
-      <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
-      <ul class="sidebar-nav">
-        <li class="user-display"><span class="icon">👤</span> {{ displayName }}</li>
-        <li><router-link to="/editar-cadastro"><span class="icon">⚙️</span> Editar Cadastro</router-link></li>
-        <li class="active"><a href="#"><span class="icon">🧠</span> Área Psicóloga</a></li>
-        <li><router-link to="/plano-de-acao"><span class="icon">📝</span> Plano de Ação</router-link></li>
-        <li><router-link to="/relatorio"><span class="icon">📊</span> Relatórios</router-link></li>
-        <li><router-link to="/historico"><span class="icon">📜</span> Histórico</router-link></li>
-        
-        <li class="logout-item"><a @click="handleLogout" href="#"><span class="icon">🚪</span> Sair</a></li>
-      </ul>
-    </nav>
+    <AppSidebar />
 
     <div class="main-wrapper">
       
@@ -236,43 +198,22 @@ function fecharModal() {
   flex-direction: row;
 }
 
-/* SIDEBAR */
-.sidebar { 
-  width: 280px; 
-  flex-shrink: 0; 
-  background-color: #ffffff; 
-  padding: 2rem 1.5rem; 
-  border-right: 1px solid #e0e0e0; 
-  display: flex; 
-  flex-direction: column; 
-  height: 100vh; 
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.sidebar-logo { width: 140px; margin-bottom: 2rem; display: block; margin: 0 auto 2rem auto; }
-.sidebar-nav { list-style: none; padding: 0; margin: 0; flex-grow: 1; }
-.sidebar-nav li { margin-bottom: 0.5rem; }
-.sidebar-nav li.user-display { font-weight: bold; padding: 1rem; border-bottom: 1px solid #eee; display: flex; align-items: center; color: #333; margin-bottom: 1.5rem; gap: 10px; }
-.sidebar-nav a { display: flex; align-items: center; padding: 0.8rem 1rem; border-radius: 6px; text-decoration: none; color: #555; transition: background 0.2s; font-size: 0.95rem; }
-.sidebar-nav a:hover { background-color: #f0f2f5; color: #3b82f6; }
-.sidebar-nav li.active a { background-color: #e0eafc; color: #3b82f6; font-weight: bold; }
-.sidebar-nav .icon { margin-right: 10px; min-width: 20px; text-align: center; }
-.logout-item { margin-top: auto; }
-.logout-item a { color: #d9534f; font-weight: bold; }
+/* REMOVI TODO O CSS DA SIDEBAR DAQUI
+   POIS AGORA ESTÁ DENTRO DE AppSidebar.vue 
+*/
 
 /* MAIN WRAPPER */
 .main-wrapper {
   flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100vh; /* Ocupa altura total */
-  overflow-y: auto; /* Scroll acontece aqui */
+  height: 100vh;
+  overflow-y: auto;
 }
 
 /* MAIN CONTENT */
 .main-content { 
-  flex: 1; /* Empurra o footer para baixo */
+  flex: 1;
   background-color: #f0f2f5; 
   padding: 2rem; 
   display: flex; 
@@ -292,8 +233,6 @@ function fecharModal() {
 }
 
 .content-title { font-size: 2rem; color: #333; border-bottom: 4px solid #3b82f6; padding-bottom: 0.5rem; margin-bottom: 2rem; display: inline-block; }
-
-/* (CSS do footer removido daqui, pois agora está no componente) */
 
 /* GRID EMPRESAS */
 .grid-cards { 
@@ -358,11 +297,8 @@ function fecharModal() {
 
 @media (max-width: 768px) {
   .app-layout { flex-direction: column; }
-  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #e0e0e0; padding: 1rem; position: relative; }
-  .sidebar-nav { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
-  .sidebar-nav li { margin: 0; }
-  .logout-item { margin-top: 0; }
-  
+  /* Ajuste no CSS da sidebar que sobrou aqui no componente pai caso precise, 
+     mas o ideal é o componente Sidebar cuidar de si mesmo */
   .content-wrapper { padding: 1.5rem; margin-top: 0; border-radius: 0; }
   .main-content { padding: 0; background-color: #f0f2f5; }
   .grid-cards { grid-template-columns: 1fr; }

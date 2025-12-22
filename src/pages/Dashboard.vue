@@ -5,10 +5,11 @@ import { apiService } from '../services/api.service';
 import type { Funcionario } from '../types/funcionario.types';
 import type { Empresa } from '../types/empresa.types';
 import { useRouter } from 'vue-router';
-// 1. IMPORTAR O FOOTER
+// 1. IMPORTAR COMPONENTES PADRÃO
 import AppFooter from '../components/AppFooter.vue';
+import AppSidebar from '../components/AppSidebar.vue';
 
-// Estado
+// --- ESTADO ---
 const funcionarios = ref<Funcionario[] | null>(null);
 const empresas = ref<Empresa[] | null>(null); 
 const isLoading = ref(true);
@@ -17,34 +18,23 @@ const errorMessage = ref<string | null>(null);
 const userStore = useUserStore();
 const router = useRouter();
 
-// --- Lógica da Sidebar ---
-function handleLogout() {
-  userStore.logout();
-  router.push('/login');
-}
+// --- AÇÕES ---
 
-// Computa o nome/cargo para exibir no topo do menu
-const displayName = computed(() => {
-  if (userStore.userRole === 'Admin') return "Administrador";
-  if (userStore.userRole === 'Psicologo') return "Psicólogo";
-  
-  if (userStore.isCliente && userStore.nomeEmpresa) {
-    return userStore.nomeEmpresa; 
-  }
-  if (userStore.isCliente) return "Cliente"; 
-
-  return "Menu";
-});
-
-// --- NOVA FUNÇÃO: Gerir Empresa ---
+// Função para navegar para a lista de funcionários de uma empresa (Admin/Psicólogo)
 function gerirEmpresa(empresaId: number) {
+  // Redireciona para a página que lista os funcionários, passando o ID da empresa
+  // Você pode ajustar o destino conforme sua preferência (ex: '/historico' ou uma página nova '/empresa-detalhe')
   router.push({ 
-    path: '/historico', 
+    path: '/historico', // Ou outra rota que mostre a lista de funcionários dessa empresa
     query: { empresaId: empresaId.toString() } 
   });
 }
 
-// --- Lógica do Conteúdo Principal (Dashboard) ---
+function irParaNovoFuncionario() {
+  router.push('/funcionario'); // Redireciona para a tela de cadastro
+}
+
+// --- ON MOUNTED ---
 onMounted(async () => {
   if (!userStore.isLoggedIn) {
     errorMessage.value = "Acesso negado. Por favor, faça o login.";
@@ -56,19 +46,24 @@ onMounted(async () => {
   isLoading.value = true;
 
   try {
+    // 1. Lógica para Cliente (Empresa)
     if (userStore.isCliente) {
       const data = await apiService.getFuncionarios();
       funcionarios.value = data || [];
     } 
+    // 2. Lógica para Admin
     else if (userStore.isAdmin) {
       const data = await apiService.getEmpresas();
       empresas.value = data || [];
-    } else if (userStore.isAdmin || userStore.userRole === 'Psicologo') {
+    } 
+    // 3. Lógica para Psicólogo (Vê empresas atribuídas)
+    else if (userStore.userRole === 'Psicologo') {
       const data = await apiService.getEmpresasParaPsicologo(); 
       empresas.value = data || [];
     }
   } catch (error) {
-    errorMessage.value = "Erro ao carregar dados.";
+    console.error(error);
+    errorMessage.value = "Erro ao carregar dados do servidor.";
   } finally {
     isLoading.value = false;
   }
@@ -78,74 +73,16 @@ onMounted(async () => {
 <template>
   <div class="app-layout">
     
-    <nav class="sidebar">
-      <div class="logo-area">
-        <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
-      </div>
-      
-      <div class="user-badge">{{ displayName }}</div>
-      
-      <ul class="sidebar-nav">
-        
-        <li v-if="userStore.userRole === 'Psicologo'">
-            <router-link to="/psicologo"><span class="icon">🧠</span> Área do Psicólogo</router-link>
-        </li>
-
-        <li v-if="userStore.isAdmin">
-          <router-link to="/criar-questionario">
-            <span class="icon">📝</span> Criar Questionário
-          </router-link>
-        </li>
-        <li v-if="userStore.isAdmin">
-          <router-link to="/disparo">
-            <span class="icon">📨</span> Enviar Questionário
-          </router-link>
-        </li>
-
-        <li v-if="userStore.isCliente">
-            <router-link to="/editar-cadastro">
-                <span class="icon">⚙️</span> Editar Cadastro
-            </router-link>
-        </li>
-        <li v-if="userStore.isCliente">
-            <router-link to="/funcionario">
-                <span class="icon">👥</span> Funcionários
-            </router-link>
-        </li>
-
-        <li>
-          <router-link to="/plano-de-acao">
-            <span class="icon">📋</span> Plano de Ação
-          </router-link>
-        </li>
-
-        <li>
-          <router-link to="/relatorio">
-            <span class="icon">📊</span> Relatório
-          </router-link>
-        </li>
-
-        <li>
-          <router-link to="/historico">
-            <span class="icon">📜</span> Histórico
-          </router-link>
-        </li>
-        
-        <li class="logout-item">
-          <a @click.prevent="handleLogout" href="#">
-            <span class="icon">🚪</span> Sair
-          </a>
-        </li>
-      </ul>
-    </nav>
+    <AppSidebar />
 
     <div class="main-wrapper">
       <main class="main-content">
-        <div class="responder-container">
+        <div class="content-wrapper">
           
           <div v-if="isLoading" class="loading">
             <span class="loader"></span> Carregando dados...
           </div>
+          
           <div v-else-if="errorMessage" class="error-message">
             {{ errorMessage }}
           </div>
@@ -154,69 +91,77 @@ onMounted(async () => {
             
             <div v-if="userStore.isAdmin || userStore.userRole === 'Psicologo'">
               <header class="page-header">
-                <h1 class="content-title">Empresas Clientes</h1>
-                </header>
+                <div>
+                  <h1 class="content-title">Empresas Clientes</h1>
+                  <p class="subtitle">Gerencie as empresas ativas. Clique na empresa para ver detalhes.</p>
+                </div>
+              </header>
               
-              <p class="description">Gerencie as empresas ativas. Clique na empresa para ver detalhes.</p>
-
-              <table v-if="empresas && empresas.length > 0" class="custom-table interactive-table">
-                <thead>
-                  <tr>
-                    <th>Nome da Empresa</th>
-                    <th>Responsável</th>
-                    <th>Setor</th>
-                    <th>CNPJ</th>
+              <div class="table-container">
+                <table v-if="empresas && empresas.length > 0" class="custom-table interactive-table">
+                  <thead>
+                    <tr>
+                      <th>Nome da Empresa</th>
+                      <th>Responsável</th>
+                      <th>Setor</th>
+                      <th>CNPJ</th>
+                      <th style="text-align: right;">Ação</th>
                     </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="empresa in empresas" :key="empresa.id" @click="gerirEmpresa(empresa.id)">
-                    <td><strong>{{ empresa.nomeEmpresa }}</strong></td>
-                    <td>{{ empresa.nomeResponsavel }}</td>
-                    <td>{{ empresa.setorAtuacao }}</td>
-                    <td>{{ empresa.cnpj }}</td>
+                  </thead>
+                  <tbody>
+                    <tr v-for="empresa in empresas" :key="empresa.id" @click="gerirEmpresa(empresa.id)">
+                      <td><strong>{{ empresa.nomeEmpresa }}</strong></td>
+                      <td>{{ empresa.nomeResponsavel }}</td>
+                      <td>{{ empresa.setorAtuacao }}</td>
+                      <td>{{ empresa.cnpj }}</td>
+                      <td style="text-align: right;">
+                        <span class="btn-link">Ver Funcionários →</span>
+                      </td>
                     </tr>
-                </tbody>
-              </table>
-              
-              <div v-else class="no-data">
-                Nenhuma empresa encontrada.
+                  </tbody>
+                </table>
+                
+                <div v-else class="no-data">
+                  <div class="empty-icon">🏢</div>
+                  <p>Nenhuma empresa encontrada.</p>
+                </div>
               </div>
             </div>
 
             <div v-else-if="userStore.isCliente">
               <header class="page-header">
-                <h1 class="content-title">Colaboradores</h1>
-                <button class="btn-primary">+ Novo Funcionário</button>
+                <div>
+                  <h1 class="content-title">Meus Colaboradores</h1>
+                  <p class="subtitle">Gerencie o cadastro da sua equipe.</p>
+                </div>
+                <button class="btn-primary" @click="irParaNovoFuncionario">+ Novo Funcionário</button>
               </header>
               
-              <p class="description">Gerencie o cadastro dos colaboradores da sua empresa.</p>
-
-              <table v-if="funcionarios && funcionarios.length > 0" class="custom-table">
-                <thead>
-                  <tr>
-                    <th>Nome</th>
-                    <th>Email</th>
-                    <th>Cargo</th>
-                    <th>Setor</th>
-                    <th style="text-align: center">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="func in funcionarios" :key="func.id">
-                    <td>{{ func.nome }}</td>
-                    <td>{{ func.email }}</td>
-                    <td>{{ func.cargo }}</td>
-                    <td>{{ func.setor }}</td>
-                    <td style="text-align: center">
-                      <button class="btn-acao btn-edit">Editar</button>
-                      <button class="btn-acao btn-delete">Excluir</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              
-              <div v-else class="no-data">
-                Nenhum funcionário cadastrado.
+              <div class="table-container">
+                <table v-if="funcionarios && funcionarios.length > 0" class="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>Email</th>
+                      <th>Cargo</th>
+                      <th>Setor</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="func in funcionarios" :key="func.id">
+                      <td><strong>{{ func.nome }}</strong></td>
+                      <td>{{ func.email }}</td>
+                      <td>{{ func.cargo || '-' }}</td>
+                      <td>{{ func.setor }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                
+                <div v-else class="no-data">
+                  <div class="empty-icon">👥</div>
+                  <p>Você ainda não tem funcionários cadastrados.</p>
+                  <button class="btn-secondary" @click="irParaNovoFuncionario">Cadastrar Primeiro Funcionário</button>
+                </div>
               </div>
             </div>
             
@@ -232,94 +177,15 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* --- FIX DE LAYOUT (CORTE DE TELA) --- */
+/* --- Layout Global --- */
 :global(html), :global(body), :global(#app) {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden; /* Importante para não rolar a janela toda */
+  height: 100%; margin: 0; padding: 0; overflow: hidden;
 }
+:global(body) { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
 
-/* --- LAYOUT GERAL --- */
-.app-layout {
-  display: flex;
-  height: 100%;
-  width: 100%;
-  background-color: #f3f4f6;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
+.app-layout { display: flex; height: 100%; width: 100%; }
 
-/* --- SIDEBAR --- */
-.sidebar {
-  width: 260px;
-  background-color: #ffffff;
-  border-right: 1px solid #e5e7eb;
-  display: flex;
-  flex-direction: column;
-  padding: 1.5rem 1rem;
-  flex-shrink: 0;
-  z-index: 10;
-}
-
-.sidebar-logo {
-  width: 140px;
-  display: block;
-  margin: 0 auto 2rem auto;
-}
-
-.sidebar-nav {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-.user-badge {
-  padding: 0.75rem;
-  margin-bottom: 1.5rem;
-  background-color: #f9fafb;
-  border-radius: 8px;
-  font-weight: 600;
-  color: #374151;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  justify-content: center;
-}
-
-.sidebar-nav li { margin-bottom: 5px; }
-
-.sidebar-nav a {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0.75rem 1rem;
-  color: #4b5563;
-  text-decoration: none;
-  border-radius: 6px;
-  margin-bottom: 0.5rem;
-  transition: all 0.2s;
-  font-size: 0.95rem;
-}
-
-.sidebar-nav a:hover, .sidebar-nav a.router-link-active {
-  background-color: #eff6ff;
-  color: #2563eb;
-  font-weight: 600;
-}
-
-.logout-item {
-  margin-top: auto;
-  border-top: 1px solid #f3f4f6;
-  padding-top: 1rem;
-}
-.logout-item a { color: #ef4444; }
-.logout-item a:hover { background-color: #fef2f2; color: #dc2626; }
-
-/* --- MAIN WRAPPER --- */
+/* --- Main Wrapper --- */
 .main-wrapper {
   flex: 1;
   display: flex;
@@ -328,111 +194,68 @@ onMounted(async () => {
   overflow-y: auto;
 }
 
-/* --- CONTEÚDO PRINCIPAL --- */
+/* --- Main Content --- */
 .main-content {
-  flex: 1;
-  padding: 2rem;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  background-color: #f3f4f6;
+  flex: 1; background-color: #f0f2f5; padding: 2rem;
+  display: flex; justify-content: center; align-items: flex-start;
 }
 
-.responder-container {
-  width: 100%;
-  max-width: 1000px;
-  background: white;
-  padding: 2.5rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+.content-wrapper {
+  max-width: 1100px; width: 100%; background: white; padding: 2.5rem;
+  border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 2rem;
 }
 
-/* --- HEADER DA PÁGINA --- */
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  border-bottom: 2px solid #f3f4f6;
-  padding-bottom: 1rem;
-}
+/* --- Header --- */
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; border-bottom: 2px solid #f3f4f6; padding-bottom: 1rem; flex-wrap: wrap; gap: 1rem; }
+.content-title { font-size: 1.8rem; color: #111; margin: 0; }
+.subtitle { color: #6b7280; margin: 5px 0 0 0; }
 
-.content-title {
-  margin: 0;
-  font-size: 1.75rem;
-  color: #111827;
-}
-
-.description { color: #6b7280; margin-bottom: 1.5rem; }
-
-/* --- TABELAS --- */
+/* --- Tabelas --- */
+.table-container { overflow-x: auto; }
 .custom-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  overflow: hidden;
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;
 }
 
-/* Estilo para tabela interativa (clicável) */
+/* Interatividade para linhas clicáveis */
 .interactive-table tbody tr {
-  cursor: pointer;
-  transition: background-color 0.2s, transform 0.1s;
+  cursor: pointer; transition: background-color 0.2s, transform 0.1s;
 }
 .interactive-table tbody tr:hover {
-  background-color: #eff6ff; /* Azul claro no hover */
-  transform: scale(1.002);
+  background-color: #eff6ff;
 }
 
 .custom-table th {
-  background-color: #f9fafb;
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  color: #374151;
-  border-bottom: 1px solid #e5e7eb;
+  background-color: #f9fafb; padding: 1rem; text-align: left;
+  font-weight: 600; color: #374151; border-bottom: 1px solid #e5e7eb;
 }
-
 .custom-table td {
-  padding: 1rem;
-  border-bottom: 1px solid #e5e7eb;
-  color: #4b5563;
+  padding: 1rem; border-bottom: 1px solid #e5e7eb; color: #4b5563; vertical-align: middle;
 }
-
 .custom-table tr:last-child td { border-bottom: none; }
 
-/* --- BOTÕES --- */
-.btn-primary {
-  background-color: #2563eb;
-  color: white;
-  border: none;
-  padding: 0.6rem 1.2rem;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.btn-primary:hover { background-color: #1d4ed8; }
+.btn-link { color: #2563eb; font-weight: 600; font-size: 0.9rem; }
 
-.btn-acao {
-  padding: 0.4rem 0.8rem;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 500;
-  margin: 0 2px;
-  transition: opacity 0.2s;
-}
-.btn-edit { background-color: #f59e0b; color: white; }
-.btn-delete { background-color: #ef4444; color: white; }
-.btn-acao:hover { opacity: 0.85; }
+/* --- Botões --- */
+.btn-primary { background: #2563eb; color: white; border: none; padding: 0.8rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; font-size: 0.95rem; }
+.btn-primary:hover { background: #1d4ed8; }
 
-/* --- ESTADOS --- */
-.loading, .error-message, .no-data {
-  text-align: center;
-  padding: 3rem;
-  color: #6b7280;
-}
+.btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 500; cursor: pointer; margin-top: 1rem; }
+.btn-secondary:hover { background: #e5e7eb; }
+
+/* --- Estados (Loading/Empty) --- */
+.loading, .error-message { text-align: center; padding: 3rem; color: #6b7280; font-size: 1.1rem; }
 .error-message { color: #dc2626; }
+
+.no-data { text-align: center; padding: 4rem 2rem; background: #f9fafb; border-radius: 8px; border: 2px dashed #e5e7eb; }
+.empty-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
+
+/* Responsivo */
+@media (max-width: 768px) {
+  .app-layout { flex-direction: column; overflow: auto; }
+  .main-wrapper { height: auto; overflow-y: visible; }
+  .content-wrapper { padding: 1.5rem; }
+  .page-header { flex-direction: column; align-items: flex-start; }
+  .btn-primary { width: 100%; margin-top: 1rem; }
+}
 </style>

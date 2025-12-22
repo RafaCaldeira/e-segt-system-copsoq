@@ -4,9 +4,9 @@ using system_copsoq_api.Data;
 using system_copsoq_api.DTOs;
 using system_copsoq_api.Models;
 using system_copsoq_api.Services;
-using Microsoft.EntityFrameworkCore; // <-- Importante para o .Include
-using system_copsoq_api.Models.Disparo; // Para o namespace Disparo
-using system_copsoq_api.Models.Formularios; // Para o namespace Formularios
+using Microsoft.EntityFrameworkCore; 
+using system_copsoq_api.Models.Disparo; 
+using system_copsoq_api.Models.Formularios; 
 
 namespace system_copsoq_api.Controllers
 {
@@ -104,42 +104,38 @@ namespace system_copsoq_api.Controllers
         }
         
         // POST: api/auth/login
-        [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
-        {
-            // 1. ATUALIZAÇÃO: Usar .Include(u => u.Empresa)
-            // Isto carrega o utilizador E a sua empresa associada (se existir)
-            var user = await _context.Usuarios
-                .Include(u => u.Empresa) // <-- CARREGA A EMPRESA
-                .FirstOrDefaultAsync(u => u.Email == loginDto.Email);
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
+        {
+            var user = await _context.Usuarios
+                .Include(u => u.Empresa) 
+                .FirstOrDefaultAsync(u => u.Email == loginDto.Email);
 
-            if (user == null)
-            {
-                return Unauthorized("Email ou senha inválidos.");
-            }
+            if (user == null)
+            {
+                return Unauthorized("Email ou senha inválidos.");
+            }
 
-            var result = _passwordHasher.VerifyHashedPassword(user, user.SenhaHash, loginDto.Senha);
+            var result = _passwordHasher.VerifyHashedPassword(user, user.SenhaHash, loginDto.Senha);
 
-            if (result == PasswordVerificationResult.Failed)
-            {
-                return Unauthorized("Email ou senha inválidos.");
-            }
+            if (result == PasswordVerificationResult.Failed)
+            {
+                return Unauthorized("Email ou senha inválidos.");
+            }
 
-            var token = _tokenService.CreateToken(user);
-            
-            // 2. ATUALIZAÇÃO: Devolver os novos campos
-            return Ok(new 
-            {
-                Message = "Login bem-sucedido!",
-                Token = token,
-                UserRole = user.Role.ToString(),
+            var token = _tokenService.CreateToken(user);
+            
+            return Ok(new 
+            {
+                Message = "Login bem-sucedido!",
+                Token = token,
+                UserRole = user.Role.ToString(),
+                NomeEmpresa = user.Empresa?.NomeEmpresa, 
+                EmpresaId = user.EmpresaID,
                 
-                // Se 'user.Empresa' não for nulo, envia o 'NomeEmpresa'
-                NomeEmpresa = user.Empresa?.NomeEmpresa, 
-                
-                // Adicionamos o EmpresaID à resposta do login
-                EmpresaId = user.EmpresaID 
-            });
-        }
+                // 👇 LINHA NOVA (Importante!) 👇
+                Id = user.ID  
+            });
+        }
     }
 }

@@ -2,7 +2,6 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { apiService } from '../services/api.service';
-// Importamos o novo tipo de opção
 import type { QuestionarioParaResponderDto, DimensaoRespostaDto, OpcaoRespostaDto } from '../types/questionario.types';
 import type { RespostaDto } from '../types/resposta.types';
 import type { SubmissaoDto } from '../types/submissao.types';
@@ -14,7 +13,11 @@ const errorMessage = ref<string | null>(null);
 const paginaAtual = ref(0); 
 const consentimentoAceito = ref(false);
 const cpfInput = ref(''); 
-const respostas = ref<Record<number, number | null>>({}); // Pode ser nulo no início
+
+// Estado das Respostas
+const respostas = ref<Record<number, number | null>>({}); // Para Likert (Números)
+const respostasTexto = ref<Record<number, string>>({});   // Para Perguntas Abertas (Texto)
+
 const isSubmitting = ref(false);
 const submitSuccess = ref(false);
 
@@ -48,12 +51,13 @@ onMounted(async () => {
       cpfInput.value = questionario.value.funcionario.cpf;
     }
 
-    // *** 1. INICIALIZAR AS RESPOSTAS ***
-    // (Para garantir que a validação 'todas respondidas' funcione)
+    // *** INICIALIZAR AS RESPOSTAS ***
     if (questionario.value) {
       const todasPerguntas = questionario.value.dimensoes.flatMap(d => d.perguntas);
       for (const p of todasPerguntas) {
-        respostas.value[p.id] = null; // Começa como nulo
+        // Inicializa ambos como vazios
+        respostas.value[p.id] = null; 
+        respostasTexto.value[p.id] = '';
       }
     }
 
@@ -72,27 +76,43 @@ const dimensaoAtual = computed<DimensaoRespostaDto | null>(() => {
   return questionario.value.dimensoes[dimensaoIndex] ?? null;
 });
 
-// *** 2. OPÇÕES DE RESPOSTA DINÂMICAS ***
-// Pega a lista de opções (ex: 1-5 ou 0-6) que veio da API
 const opcoesRespostaDinamicas = computed<OpcaoRespostaDto[]>(() => {
   if (!questionario.value) return [];
-  // Ordena pela 'Ordem' (ex: 1º, 2º, 3º...)
   return questionario.value.opcoesResposta.sort((a, b) => a.ordem - b.ordem);
 });
 
 const totalPaginas = computed(() => (questionario.value?.dimensoes.length ?? 0) + 1);
 
+// --- FUNÇÃO AUXILIAR: Decidir se é Texto ou Likert ---
+function ehPerguntaTexto(pergunta: any): boolean {
+    // LÓGICA: Se a dimensão atual tiver "Qualitativa" ou "Aberta" no título,
+    // OU se o questionário não tiver opções globais cadastradas.
+    // Você pode ajustar isso conforme sua necessidade.
+    
+    const tituloDimensao = dimensaoAtual.value?.titulo?.toLowerCase() || '';
+    if (tituloDimensao.includes('qualitativa') || tituloDimensao.includes('obs') || tituloDimensao.includes('comentário')) {
+        return true;
+    }
+
+    // Fallback: Se não tem opções de resposta (bolinhas), assume que é texto
+    if (opcoesRespostaDinamicas.value.length === 0) {
+        return true;
+    }
+
+    return false;
+}
+
 // --- Lógica de Ações (Funções) ---
 async function irParaProximaPagina() {
   if (!questionario.value || isSubmitting.value) return;
 
-  // (Validação Página 0 - Consentimento)
+  // Pag 0: Consentimento
   if (paginaAtual.value === 0 && !consentimentoAceito.value) {
     alert('Você precisa aceitar o termo de consentimento para continuar.');
     return;
   }
 
-  // (Validação Página 1 - CPF)
+  // Pag 1: CPF
   if (paginaAtual.value === 1) {
     if (!cpfInput.value || cpfInput.value.replace(/\D/g, '').length !== 11) { 
        alert('Por favor, preencha o seu CPF corretamente (11 números).');
@@ -100,24 +120,37 @@ async function irParaProximaPagina() {
     }
   }
 
-  // (Validação Páginas de Perguntas)
+  // Pag 2+: Perguntas (Validação Inteligente)
   if (dimensaoAtual.value) {
     for (const pergunta of dimensaoAtual.value.perguntas) {
-      if (respostas.value[pergunta.id] === null) { // Verifica se é nulo
-        alert('Por favor, responda a todas as perguntas desta página.');
-        return;
+        
+      if (ehPerguntaTexto(pergunta)) {
+          // Validação para Texto: Se for obrigatório (ajuste se quiser opcional)
+          // Se quiser obrigar escrever algo:
+          /*
+          if (!respostasTexto.value[pergunta.id] || respostasTexto.value[pergunta.id].trim() === '') {
+             alert('Por favor, responda a pergunta: ' + pergunta.texto);
+             return;
+          }
+          */
+          // Se for opcional, não faz nada aqui.
+      } else {
+          // Validação para Likert: Tem que ter marcado algo
+          if (respostas.value[pergunta.id] === null) { 
+            alert('Por favor, responda todas as perguntas desta página.');
+            return;
+          }
       }
     }
   }
   
-  // (Navegação)
+  // Navegação
   const totalPaginasQuestionario = (questionario.value.dimensoes.length || 0) + 1;
   if (paginaAtual.value < totalPaginasQuestionario) {
     paginaAtual.value++;
     return;
   }
   
-  // (Submit na última página)
   if (paginaAtual.value === totalPaginasQuestionario) {
     await handleSubmit();
   }
@@ -134,36 +167,77 @@ async function handleSubmit() {
   isSubmitting.value = true;
   errorMessage.value = null;
 
-  // Validação final (vê se alguma resposta ainda é 'null')
-  const respostasInvalidas = Object.values(respostas.value).some(v => v === null);
-  if (respostasInvalidas) {
-      errorMessage.value = 'Parece que algumas perguntas não foram respondidas. Por favor, volte e verifique.';
+  // --- MONTAGEM DO DTO ---
+  const respostasArray: RespostaDto[] = [];
+
+  // 1. Adiciona Likert (Números)
+  Object.keys(respostas.value).forEach(key => {
+    const id = parseInt(key);
+    const valor = respostas.value[id];
+    
+    // Verificação rigorosa do TypeScript:
+    // Só adiciona se for especificamente um número (evita null e undefined)
+    if (typeof valor === 'number') {
+        respostasArray.push({ 
+            perguntaId: id, 
+            valorResposta: valor 
+        });
+    }
+  });
+
+  // 2. Adiciona Texto (Abertas)
+  Object.keys(respostasTexto.value).forEach(key => {
+    const id = parseInt(key);
+    const texto = respostasTexto.value[id];
+    
+    if (texto && texto.trim().length > 0) {
+        respostasArray.push({ 
+            perguntaId: id, 
+            textoResposta: texto,
+            valorResposta: null // Agora o TypeScript vai aceitar esse null!
+        });
+    }
+  });
+
+  // 2. Adiciona Texto (Abertas)
+  Object.keys(respostasTexto.value).forEach(key => {
+    const id = parseInt(key);
+    const texto = respostasTexto.value[id];
+    if (texto && texto.trim().length > 0) {
+        respostasArray.push({ 
+            perguntaId: id, 
+            textoResposta: texto,
+            valorResposta: null // Backend agora aceita null aqui
+        });
+    }
+  });
+
+  // Se não tiver nenhuma resposta (nem texto nem numero), bloqueia
+  if (respostasArray.length === 0) {
+      errorMessage.value = "Você não preencheu nenhuma resposta.";
       isSubmitting.value = false;
       return;
   }
-
-  // Mapeia as respostas para o DTO
-  const respostasArray: RespostaDto[] = Object.keys(respostas.value).map(perguntaIdStr => {
-    const perguntaId = parseInt(perguntaIdStr, 10);
-    return {
-      perguntaId: perguntaId,
-      valorResposta: respostas.value[perguntaId]! // O '!' diz ao TS que temos a certeza que não é nulo
-    };
-  });
 
   const submissaoDto: SubmissaoDto = {
     cpf: cpfInput.value.replace(/\D/g, ''), 
     respostas: respostasArray
   };
 
-  // Envia para a API
-  const success = await apiService.submitRespostas(token, submissaoDto);
+  try {
+    const result = await apiService.submitRespostas(token, submissaoDto);
 
-  if (success) {
-    submitSuccess.value = true;
-  } else {
-    errorMessage.value = 'Erro ao enviar as suas respostas. Por favor, tente novamente.';
+    if (result.success) {
+        submitSuccess.value = true;
+    } else {
+        errorMessage.value = result.message || 'Erro desconhecido ao enviar.';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  } catch (error) {
+    errorMessage.value = 'Ocorreu um erro inesperado na comunicação com o servidor.';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
+
   isSubmitting.value = false;
 }
 </script>
@@ -205,9 +279,7 @@ async function handleSubmit() {
           </div>
 
           <div v-else-if="paginaAtual === 1" class="dados-container">
-            <div class="progresso">
-              Página 1 / {{ totalPaginas }}
-            </div>
+            <div class="progresso">Página 1 / {{ totalPaginas }}</div>
             <h1 class="content-title">Confirmação de Dados</h1>
             <p>Por favor, confirme os seus dados e preencha o seu CPF.</p>
             <div class="dados-info"><strong>Nome:</strong> {{ questionario.funcionario.nome }}</div>
@@ -229,7 +301,16 @@ async function handleSubmit() {
               <div v-for="pergunta in dimensaoAtual.perguntas" :key="pergunta.id" class="pergunta-item">
                 <p>{{ pergunta.texto }}</p>
                 
-                <div class="opcoes-likert">
+                <div v-if="ehPerguntaTexto(pergunta)" class="campo-texto">
+                    <textarea 
+                        v-model="respostasTexto[pergunta.id]"
+                        class="textarea-resposta"
+                        placeholder="Digite sua resposta aqui..."
+                        rows="4"
+                    ></textarea>
+                </div>
+
+                <div v-else class="opcoes-likert">
                   <label v-for="opcao in opcoesRespostaDinamicas" :key="opcao.valor">
                     <input 
                       type="radio" 
@@ -253,13 +334,16 @@ async function handleSubmit() {
               Voltar
             </button>
             
-            <span style="flex-grow: 1;"></span> <button 
+            <span style="flex-grow: 1;"></span> 
+
+            <button 
               class="btn-continuar"
               @click="irParaProximaPagina" 
               :disabled="(paginaAtual === 0 && !consentimentoAceito) || (paginaAtual === 1 && cpfInput.replace(/\D/g, '').length !== 11) || isSubmitting">
               {{ isSubmitting ? 'A enviar...' : (paginaAtual === totalPaginas ? 'Finalizar' : 'Continuar') }}
             </button>
           </div>
+
         </div>
 
       </div>
@@ -268,19 +352,40 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
-/* O seu CSS existente está ótimo, não precisa de alterações */
-/* ... (Cole o seu CSS completo aqui) ... */
-:global(body) {
-  margin: 0;
+/* (MANTIVE SEUS ESTILOS ORIGINAIS + ESTILO DO TEXTAREA) */
+:global(html), :global(body), :global(#app) {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden;
   background-color: #333;
-  color: #333;
-  font-family: Arial, sans-serif;
 }
+
+.textarea-resposta {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 1rem;
+    resize: vertical;
+    margin-top: 5px;
+    background-color: #fff;
+}
+
+.textarea-resposta:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
 .page-wrapper {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  width: 100%;
   align-items: center;
+  background-color: #333;
 }
 .page-header {
   width: 100%;
@@ -288,6 +393,7 @@ async function handleSubmit() {
   background-color: #ffffff;
   text-align: center;
   border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
 }
 .header-logo {
   width: 150px;
@@ -296,21 +402,25 @@ async function handleSubmit() {
 .main-content {
   width: 100%;
   flex: 1;
-  padding: 2rem;
+  padding: 2rem 1rem;
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  box-sizing: border-box; 
+  box-sizing: border-box;
 }
 .responder-container {
   max-width: 900px;
   width: 100%;
-  margin: 0;
   padding: 2.5rem 3rem;
   border-radius: 8px;
   background-color: #f4f7f6;
   color: #333;
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  margin-bottom: 2rem;
+}
+@media (max-width: 600px) {
+  .responder-container { padding: 1.5rem; }
+  .main-content { padding: 1rem; }
 }
 .loading, .error-message, .success-message {
   text-align: center;
@@ -326,6 +436,7 @@ h1.content-title {
   padding-bottom: 0.5rem;
   margin-bottom: 2rem;
   display: inline-block;
+  line-height: 1.2;
 }
 h3 {
   font-size: 1.3rem;
@@ -342,13 +453,14 @@ p, li {
 .consentimento {
   margin-top: 1.5rem;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
 }
 .consentimento input {
   width: 18px;
   height: 18px;
   margin-right: 0.8rem;
   cursor: pointer;
+  margin-top: 4px;
 }
 .consentimento label {
   font-size: 1.1rem;
@@ -394,22 +506,35 @@ p, li {
   font-size: 1.2rem;
   font-weight: 500;
   color: #222;
+  margin-bottom: 1rem;
 }
 .opcoes-likert {
   display: flex;
-  flex-wrap: wrap; /* Permite que as opções quebrem a linha */
-  gap: 1rem; /* Espaço entre os botões */
+  flex-wrap: wrap; 
+  gap: 1rem; 
   margin-top: 0.5rem;
 }
 .opcoes-likert label {
   margin: 0;
   cursor: pointer;
   color: #444;
-  display: flex; /* Alinha o input e o texto */
+  display: flex;
   align-items: center;
+  background: #fff;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 20px;
+  transition: all 0.2s;
+}
+.opcoes-likert label:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+.opcoes-likert input:checked + span {
+   font-weight: bold;
 }
 .opcoes-likert input {
-  margin-right: 0.3rem;
+  margin-right: 0.5rem;
   cursor: pointer;
 }
 .navegacao {
@@ -417,6 +542,8 @@ p, li {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 .navegacao button {
   padding: 0.8rem 1.5rem;
@@ -426,20 +553,20 @@ p, li {
   font-weight: bold;
   font-size: 1rem;
   transition: background-color 0.2s;
+  min-width: 120px;
 }
 .btn-voltar {
-  background-color: #777;
+  background-color: #64748b;
   color: white;
 }
+.btn-voltar:hover { background-color: #475569; }
 .btn-continuar {
   background-color: #3b82f6;
   color: white;
 }
-.navegacao button:hover:not(:disabled) {
-  opacity: 0.8;
-}
+.btn-continuar:hover { background-color: #2563eb; }
 .navegacao button:disabled {
-  background-color: #aaa;
+  background-color: #cbd5e1;
   cursor: not-allowed;
   opacity: 0.7;
 }

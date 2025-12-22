@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router'; 
 import { useUserStore } from '../store/user';
 import { apiService } from '../services/api.service';
 import type { FuncionarioCreateDto } from '../types/funcionario.types';
-// 1. IMPORTAR O FOOTER
+// 1. IMPORTAR COMPONENTES PADRÃO
 import AppFooter from '../components/AppFooter.vue';
+import AppSidebar from '../components/AppSidebar.vue';
 
 const router = useRouter();
 const route = useRoute(); 
@@ -25,12 +26,14 @@ const form = ref<FuncionarioCreateDto>({
   setor: ''
 });
 
-// Sidebar
-function handleLogout() { userStore.logout(); router.push('/login'); }
-const displayName = computed(() => userStore.nomeEmpresa || userStore.userRole);
-
 // Carregar dados ao abrir a página
 onMounted(async () => {
+  // Verifica se está logado
+  if (!userStore.isLoggedIn) {
+     router.push('/login');
+     return;
+  }
+
   if (!funcionarioId) {
     alert("ID inválido.");
     router.push('/funcionario');
@@ -82,46 +85,17 @@ function voltar() {
 <template>
   <div class="app-layout">
     
-    <nav class="sidebar">
-      <div class="logo-area">
-        <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
-      </div>
-      
-      <div class="user-badge">{{ displayName }}</div>
-
-      <ul class="sidebar-nav">
-        <li v-if="userStore.isAdmin">
-          <router-link to="/criar-questionario"><span class="icon">📝</span> Criar Questionário</router-link>
-        </li>
-        <li v-if="userStore.isAdmin">
-          <router-link to="/disparo"><span class="icon">📨</span> Enviar Questionário</router-link>
-        </li>
-
-        <li v-if="userStore.isCliente">
-            <router-link to="/editar-cadastro"><span class="icon">⚙️</span> Editar Cadastro</router-link>
-        </li>
-        <li v-if="userStore.isCliente" class="active">
-            <router-link to="/funcionario"><span class="icon">👥</span> Funcionários</router-link>
-        </li>
-
-        <li v-if="userStore.userRole === 'Psicologo'">
-            <router-link to="/psicologo"><span class="icon">🧠</span> Área do Psicólogo</router-link>
-        </li>
-
-        <li><router-link to="/plano-de-acao"><span class="icon">📋</span> Plano de Ação</router-link></li>
-        <li><router-link to="/relatorio"><span class="icon">📊</span> Relatórios</router-link></li>
-        <li><router-link to="/historico"><span class="icon">📜</span> Histórico</router-link></li>
-        
-        <li class="logout-item"><a @click.prevent="handleLogout" href="#"><span class="icon">🚪</span> Sair</a></li>
-      </ul>
-    </nav>
+    <AppSidebar />
 
     <div class="main-wrapper">
       <main class="main-content">
         <div class="responder-container">
+          
           <h1 class="content-title">Editar Funcionário</h1>
           
-          <div v-if="isLoading" class="loading">Carregando dados...</div>
+          <div v-if="isLoading" class="loading">
+            <div class="spinner"></div> Carregando dados...
+          </div>
 
           <form v-else @submit.prevent="salvarAlteracoes" class="form-content">
             
@@ -192,40 +166,18 @@ function voltar() {
   width: 100%; 
 }
 
-/* Sidebar */
-.sidebar { 
-  width: 260px; 
-  background-color: #ffffff; 
-  border-right: 1px solid #e5e7eb; 
-  display: flex; 
-  flex-direction: column; 
-  padding: 1.5rem 1rem; 
-  flex-shrink: 0; 
-  z-index: 10;
-}
-.sidebar-logo { width: 120px; display: block; margin: 0 auto 1.5rem auto; }
-.user-badge { background: #f3f4f6; padding: 0.5rem; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 1.5rem; color: #374151; }
-.sidebar-nav { list-style: none; padding: 0; margin: 0; flex: 1; overflow-y: auto; }
-.sidebar-nav li { margin-bottom: 5px; }
-.sidebar-nav a { display: flex; align-items: center; padding: 0.75rem 1rem; color: #4b5563; text-decoration: none; border-radius: 6px; font-weight: 500; transition: all 0.2s; }
-.sidebar-nav a:hover { background: #f3f4f6; color: #111; }
-.sidebar-nav li.active a { background: #eff6ff; color: #2563eb; font-weight: 600; }
-.sidebar-nav .icon { margin-right: 10px; min-width: 20px; text-align: center; }
-.logout-item { margin-top: auto; border-top: 1px solid #f3f4f6; padding-top: 1rem; }
-.logout-item a { color: #ef4444; }
-
-/* --- MAIN WRAPPER (Novo container flex column) --- */
+/* --- MAIN WRAPPER --- */
 .main-wrapper {
   flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100vh; /* Altura total da viewport */
-  overflow-y: auto; /* Scroll acontece aqui */
+  height: 100vh;
+  overflow-y: auto;
 }
 
 /* --- MAIN CONTENT --- */
 .main-content { 
-  flex: 1; /* Empurra o footer para baixo */
+  flex: 1;
   padding: 2rem; 
   display: flex; 
   justify-content: center; 
@@ -263,10 +215,12 @@ function voltar() {
 .btn-voltar { padding: 0.8rem 1.5rem; cursor: pointer; border: 1px solid #d1d5db; border-radius: 6px; font-weight: 600; background-color: #fff; color: #4b5563; font-size: 1rem; transition: background 0.2s; }
 .btn-voltar:hover { background-color: #f9fafb; color: #1f2937; }
 
+.spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 10px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* Responsivo */
 @media (max-width: 768px) {
   .app-layout { flex-direction: column; overflow: auto; }
-  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #e5e7eb; padding: 1rem; }
   .main-wrapper { height: auto; overflow-y: visible; }
   .form-grid { grid-template-columns: 1fr; }
   .responder-container { padding: 1.5rem; }

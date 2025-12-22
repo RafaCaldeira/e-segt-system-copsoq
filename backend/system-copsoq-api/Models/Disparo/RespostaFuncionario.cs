@@ -1,7 +1,6 @@
 using System.ComponentModel.DataAnnotations;
-using system_copsoq_api.Models.Formularios; // Para aceder a 'Pergunta'
+using system_copsoq_api.Models.Formularios;
 
-// O namespace DEVE refletir a pasta
 namespace system_copsoq_api.Models.Disparo 
 {
     public class RespostaFuncionario
@@ -10,13 +9,15 @@ namespace system_copsoq_api.Models.Disparo
 
         [Required]
         public int DisparoID { get; set; } 
-        public Disparo Disparo { get; set; } = null!; // Encontrado no mesmo namespace
+        public Disparo Disparo { get; set; } = null!;
 
         [Required]
         public int PerguntaID { get; set; } 
-        public Pergunta Pergunta { get; set; } = null!; // Vem de ...Models.Formularios
+        public Pergunta Pergunta { get; set; } = null!;
 
-        [Required]
-        public int ValorResposta { get; set; } 
+        // ADICIONE O '?' AQUI 👇 e remova o [Required]
+        public int? ValorResposta { get; set; } 
+
+        public string? TextoResposta { get; set; }
     }
 }

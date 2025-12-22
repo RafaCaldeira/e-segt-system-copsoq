@@ -41,16 +41,31 @@ export const apiService = {
     }
   },
 
-  async submitRespostas(token: string, submissao: SubmissaoDto): Promise<boolean> {
+  async submitRespostas(token: string, submissao: SubmissaoDto): Promise<{ success: boolean, message?: string }> {
     try {
       const response = await fetch(`${API_BASE_URL}/responder/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(submissao),
       });
-      return response.ok;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        try {
+            // Attempt to parse backend JSON error message
+            const errorJson = JSON.parse(errorText);
+            // Look for 'message' or 'title' common in .NET errors
+            const msg = errorJson.message || errorJson.title || errorText; 
+            return { success: false, message: msg };
+        } catch {
+            // Fallback to raw text
+            return { success: false, message: errorText || 'Erro no servidor' };
+        }
+      }
+
+      return { success: true };
     } catch (error) {
-      return false;
+      return { success: false, message: 'Falha de conexão com a API.' };
     }
   },
 
@@ -63,7 +78,15 @@ export const apiService = {
       });
       if (!response.ok) return { success: false, token: null, userRole: null, error: 'Credenciais inválidas' };
       const data: LoginSuccessResponse = await response.json();
-      return { success: true, token: data.token, userRole: data.userRole, nomeEmpresa: data.nomeEmpresa, empresaId: data.empresaId };
+      return { 
+        success: true, 
+        token: data.token, 
+        userRole: data.userRole, 
+        nomeEmpresa: data.nomeEmpresa, 
+        empresaId: data.empresaId,
+        // ADICIONE ESTA LINHA para passar o ID para a store
+        id: data.id || data.userId 
+      };
     } catch (error) {
       return { success: false, token: null, userRole: null, error: 'Falha de rede' };
     }
@@ -72,7 +95,7 @@ export const apiService = {
   async registerCliente(data: RegistroClienteDto): Promise<{ success: boolean; error?: string }> {
     // ... (o seu código de registo existente) ...
     // (Vou omitir para poupar espaço, mas mantenha-o!)
-     const payload = {
+      const payload = {
       Email: data.email,
       Senha: data.senha,
       NomeEmpresa: data.nomeEmpresa,
@@ -523,6 +546,38 @@ async getListaFuncionarios(empresaId: number): Promise<any[] | null> {
       console.error('Erro ao buscar histórico:', error);
       return null;
     }
-  }
+  },
 
+  async getUsuarioAtual(id: number) {
+    try {
+      // CORREÇÃO: Usando fetch em vez de api.get
+      const response = await fetch(`${API_BASE_URL}/usuario/${id}`, {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+
+      if (!response.ok) return null;
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Erro ao buscar usuário", error);
+      return null;
+    }
+  },
+
+  async updateUsuario(id: number, data: any) {
+    try {
+      // CORREÇÃO: Usando fetch em vez de api.put
+      const response = await fetch(`${API_BASE_URL}/usuario/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data)
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error("Erro ao atualizar usuário", error);
+      return false;
+    }
+  }
 };

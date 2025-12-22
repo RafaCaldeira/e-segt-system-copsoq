@@ -7,8 +7,9 @@ import type { RelatorioCompletoDto } from '../types/relatorio.types';
 import type { Empresa } from '../types/empresa.types';
 import type { Questionario } from '../types/questionario.types'; 
 import { useRouter } from 'vue-router';
-// 1. IMPORTAR O FOOTER
+// 1. IMPORTAR COMPONENTES PADRÃO
 import AppFooter from '../components/AppFooter.vue';
+import AppSidebar from '../components/AppSidebar.vue';
 
 // --- Estado ---
 const relatorio = ref<RelatorioCompletoDto | null>(null);
@@ -28,12 +29,6 @@ const router = useRouter();
 
 // --- Permissões ---
 const podeTrocarEmpresa = computed(() => userStore.isAdmin || userStore.userRole === 'Psicologo');
-
-const displayName = computed(() => {
-  if (userStore.userRole === 'Admin') return "Administrador";
-  if (userStore.userRole === 'Psicologo') return "Psicólogo";
-  return userStore.nomeEmpresa || "Cliente";
-});
 
 // --- Inicialização ---
 onMounted(async () => {
@@ -108,33 +103,12 @@ function getRiscoClass(nivelRisco: string): string {
 function downloadPDF() {
   if (relatorio.value) pdfService.gerarRelatorioPDF(relatorio.value);
 }
-
-function handleLogout() { userStore.logout(); router.push('/login'); }
 </script>
 
 <template>
   <div class="app-layout">
-    <nav class="sidebar">
-      <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
-
-      <ul class="sidebar-nav">
-        <li class="user-display"><span class="icon">👤</span> {{ displayName }}</li>
-        
-        <li v-if="userStore.isAdmin"><router-link to="/criar-questionario"><span class="icon">📝</span> Criar Questionário</router-link></li>
-        <li v-if="userStore.isAdmin"><router-link to="/disparo"><span class="icon">📨</span> Enviar Questionário</router-link></li>
-        
-        <li v-if="userStore.isCliente"><router-link to="/editar-cadastro"><span class="icon">⚙️</span> Editar Cadastro</router-link></li>
-        
-        <li v-if="userStore.userRole === 'Psicologo'"><router-link to="/psicologo"><span class="icon">🧠</span> Área do Psicólogo</router-link></li>
-        
-        <li v-if="userStore.isCliente"><router-link to="/funcionario"><span class="icon">👥</span> Funcionario</router-link></li>
-        
-        <li class="active"><router-link to="/relatorio"><span class="icon">📊</span> Relatórios</router-link></li> 
-        <li><router-link to="/plano-de-acao"><span class="icon">📋</span> Plano de ação</router-link></li>
-        <li><router-link to="/historico"><span class="icon">📜</span> Histórico</router-link></li>
-        <li class="logout-item"><a @click="handleLogout" href="#"><span class="icon">🚪</span> Sair</a></li>
-      </ul>
-    </nav>
+    
+    <AppSidebar />
 
     <div class="main-wrapper">
       <main class="main-content">
@@ -349,6 +323,9 @@ function handleLogout() { userStore.logout(); router.push('/login'); }
 .info-banner.info { background: #eff6ff; color: #1e40af; border: 1px solid #dbeafe; }
 .info-banner.error { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
 .loading-state { text-align: center; padding: 3rem; color: #64748b; }
+.spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 10px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .fade-in { animation: fadeIn 0.4s ease-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 

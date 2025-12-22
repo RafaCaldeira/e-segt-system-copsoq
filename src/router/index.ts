@@ -13,6 +13,7 @@ import EditarFuncionario from "../pages/EditarFuncionario.vue";
 import Disparo from "../pages/DispararQuestionario.vue";
 import Historico from '../pages/Historico.vue';
 import AreaPsicologo from '../pages/AreaPsicologo.vue';
+import EditarCadastro from "../pages/EditarCadastro.vue";
 
 
 const routes = [
@@ -27,6 +28,7 @@ const routes = [
   { path: '/disparo', name: 'Disparo', component: Disparo},
   { path: '/historico', name: 'Historico', component: Historico },
   { path: '/psicologo', name: 'AreaPsicologo', component: AreaPsicologo },
+  { path: '/editar-cadastro', name: 'EditarCadastro', component: EditarCadastro },
 
   // 👉 Nova rota adicionada
   { path: '/criar-questionario', name: 'CriarQuestionario', component: CriarQuestionario },

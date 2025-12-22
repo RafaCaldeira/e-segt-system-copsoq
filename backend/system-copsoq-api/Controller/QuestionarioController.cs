@@ -279,10 +279,19 @@ namespace system_copsoq_api.Controllers
                             // Linhas da Tabela
                             foreach (var resposta in dados.Respostas)
                             {
-                                table.Cell().Element(CellStyle).Text(resposta.Pergunta.Texto);
-                                
-                                // Aqui mostramos o Valor (1 a 5). Se quiser converter para texto (ex: "Sempre"), precisaria fazer um switch/case ou join com Opcoes
-                                table.Cell().Element(CellStyle).Text(resposta.ValorResposta.ToString()); 
+                               table.Cell().Element(CellStyle).Text(resposta.Pergunta.Texto);
+    
+                                // --- CORREÇÃO AQUI ---
+                                // Verifica qual resposta deve ser mostrada:
+                                // 1. Se tiver texto, mostra o texto.
+                                // 2. Se tiver valor numérico, converte pra string.
+                                // 3. Se não tiver nada, põe um traço "-".
+                                string respostaParaImprimir = 
+                                    !string.IsNullOrEmpty(resposta.TextoResposta) 
+                                        ? resposta.TextoResposta 
+                                        : (resposta.ValorResposta.HasValue ? resposta.ValorResposta.Value.ToString() : "-");
+
+                                table.Cell().Element(CellStyle).Text(respostaParaImprimir); 
                             }
 
                             // Estilo auxiliar para células

@@ -7,8 +7,9 @@ import type { Empresa } from '../types/empresa.types';
 import { useRouter, useRoute } from 'vue-router';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-// 1. IMPORTAR O FOOTER
+// 1. IMPORTAR COMPONENTES PADRÃO
 import AppFooter from '../components/AppFooter.vue';
+import AppSidebar from '../components/AppSidebar.vue';
 
 // --- Estado ---
 const planos = ref<PlanoDeAcao[]>([]);
@@ -26,18 +27,9 @@ const userStore = useUserStore();
 const router = useRouter();
 const route = useRoute();
 
-// --- PERMISSÕES (Onde a mágica acontece) ---
+// --- PERMISSÕES ---
 // Define quem pode Criar Plano, Adicionar Ação e Concluir Ação
 const podeEditar = computed(() => userStore.isAdmin || userStore.userRole === 'Psicologo');
-
-// Permissão para ver links de Questionário no menu
-const podeGerenciarQuestionarios = computed(() => userStore.isAdmin );
-
-const displayName = computed(() => {
-  if (userStore.userRole === 'Admin') return "Administrador";
-  if (userStore.userRole === 'Psicologo') return "Psicólogo";
-  return userStore.nomeEmpresa || "Cliente";
-});
 
 // --- Lógica do Plano Atual ---
 const planoAtual = computed(() => planos.value.length > 0 ? planos.value[0] : null);
@@ -215,45 +207,17 @@ function baixarPDF() {
   const nomeArquivo = `Plano_${nomeEmpresaSafe.replace(/\s+/g, '_')}.pdf`;
   doc.save(nomeArquivo);
 }
-
-function handleLogout() {
-  userStore.logout();
-  router.push('/login');
-}
 </script>
 
 <template>
   <div class="app-layout">
     
-    <nav class="sidebar">
-      <div class="logo-area">
-        <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
-      </div>
-      
-      <div class="user-badge">{{ displayName }}</div>
-      
-      <ul class="sidebar-nav">
-        
-        <li v-if="podeGerenciarQuestionarios"><router-link to="/criar-questionario"><span class="icon">📝</span> Criar Questionário</router-link></li>
-        <li v-if="podeGerenciarQuestionarios"><router-link to="/disparo"><span class="icon">📨</span> Enviar Questionário</router-link></li>
-        
-        <li v-if="userStore.isCliente"><router-link to="/editar-cadastro"><span class="icon">⚙️</span> Editar Cadastro</router-link></li>
-        
-        <li v-if="userStore.userRole === 'Psicologo'"><router-link to="/psicologo"><span class="icon">🧠</span> Área do Psicólogo</router-link></li>
-        
-        <li v-if="userStore.isCliente"><router-link to="/funcionario"><span class="icon">👥</span> Funcionario</router-link></li>
-        
-        <li><router-link to="/relatorio"><span class="icon">📊</span> Relatórios</router-link></li>
-        <li class="active"><router-link to="/plano-de-acao"><span class="icon">📋</span> Plano de Ação</router-link></li>
-        <li><router-link to="/historico"><span class="icon">📜</span> Histórico</router-link></li>
-        
-        <li class="logout-item"><a @click.prevent="handleLogout" href="#"><span class="icon">🚪</span> Sair</a></li>
-      </ul>
-    </nav>
+    <AppSidebar />
 
     <div class="main-wrapper">
       <main class="main-content">
         <div class="content-wrapper">
+          
           <header class="page-header">
             <div>
               <h1 class="content-title">Plano de Ação</h1>
@@ -261,10 +225,12 @@ function handleLogout() {
                   🏢 {{ nomeEmpresaSelecionada }}
               </h2>
             </div>
+            
             <div class="header-actions">
               <button v-if="planoAtual" @click="baixarPDF" class="btn-pdf" title="Baixar lista em PDF">
                 📄 Baixar PDF
               </button>
+              
               <div v-if="podeEditar" class="company-selector">
                 <select v-model="selectedEmpresaId">
                   <option :value="null" disabled>-- Selecione uma Empresa --</option>
@@ -277,19 +243,26 @@ function handleLogout() {
           </header>
 
           <div v-if="errorMessage" class="error-banner">⚠️ {{ errorMessage }}</div>
-          <div v-if="isLoading" class="loading-state"><div class="spinner"></div> Carregando plano de ação...</div>
+          
+          <div v-if="isLoading" class="loading-state">
+            <div class="spinner"></div> Carregando plano de ação...
+          </div>
 
           <div v-else>
+            
             <div v-if="!selectedEmpresaId" class="empty-state">
               <p>⬅️ Selecione uma empresa acima para visualizar o plano.</p>
             </div>
+            
             <div v-else-if="!planoAtual" class="empty-state">
               <p>A empresa <strong>{{ nomeEmpresaSelecionada }}</strong> ainda não possui um Plano de Ação.</p>
               <button v-if="podeEditar" @click="criarPlanoInicial" class="btn-create">
                 ✨ Criar Plano Inicial
               </button>
             </div>
+
             <div v-else class="plan-container fade-in">
+              
               <div class="progress-card">
                 <div class="progress-info">
                   <span class="progress-title">Progresso Geral</span>
@@ -303,12 +276,15 @@ function handleLogout() {
 
               <div class="actions-list">
                 <h3 class="section-title">Ações e Melhorias</h3>
+                
                 <div v-if="planoAtual.acoes.length === 0" class="no-actions">Nenhuma ação cadastrada. Adicione melhorias abaixo.</div>
+                
                 <div v-for="acao in planoAtual.acoes" :key="acao.id" class="action-card" :class="{ 'card-concluido': acao.status === 'Concluido' }">
                   <div class="action-content">
                     <div class="check-circle" :class="{ checked: acao.status === 'Concluido' }">{{ acao.status === 'Concluido' ? '✔' : '' }}</div>
                     <span class="action-desc" :class="{ struck: acao.status === 'Concluido' }">{{ acao.descricao }}</span>
                   </div>
+                  
                   <button 
                     @click="toggleStatus(acao)"
                     class="btn-status"
@@ -328,8 +304,10 @@ function handleLogout() {
                   <button @click="adicionarAcao" :disabled="isAddingAcao || !novaAcaoTexto">{{ isAddingAcao ? '...' : '+ Adicionar' }}</button>
                 </div>
               </div>
+
             </div>
           </div>
+
         </div>
       </main>
 
@@ -340,31 +318,20 @@ function handleLogout() {
 </template>
 
 <style scoped>
-/* --- FIX DE LAYOUT (CORTE DE TELA) --- */
+/* --- FIX DE LAYOUT (Rolagem) --- */
 :global(html), :global(body), :global(#app) {
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow: hidden; /* Importante para não rolar a janela toda */
+  overflow: hidden; 
 }
 
-/* CSS GERAL */
-.app-layout { display: flex; height: 100%; width: 100%; background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
+/* Layout Geral */
+:global(body) { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
 
-/* SIDEBAR */
-.sidebar { width: 260px; background: white; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; padding: 1.5rem 1rem; flex-shrink: 0; z-index: 10; }
-.sidebar-logo { width: 120px; display: block; margin: 0 auto 1.5rem auto; }
-.user-badge { background: #f3f4f6; padding: 0.5rem; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 1.5rem; color: #374151; }
-.sidebar-nav { list-style: none; padding: 0; margin: 0; flex: 1; overflow-y: auto; }
-.sidebar-nav li { margin-bottom: 5px; }
-.sidebar-nav a { display: flex; align-items: center; padding: 0.75rem 1rem; color: #4b5563; text-decoration: none; border-radius: 6px; font-weight: 500; transition: all 0.2s; }
-.sidebar-nav a:hover { background: #f3f4f6; color: #111; }
-.sidebar-nav li.active a { background: #eff6ff; color: #2563eb; font-weight: 600; }
-.sidebar-nav .icon { margin-right: 10px; min-width: 24px; text-align: center; }
-.logout-item { margin-top: auto; border-top: 1px solid #f3f4f6; padding-top: 1rem; }
-.logout-item a { color: #ef4444; }
+.app-layout { display: flex; height: 100%; width: 100%; }
 
-/* MAIN WRAPPER (Novo container flex column) */
+/* --- MAIN WRAPPER (Novo container flex column) --- */
 .main-wrapper {
   flex: 1;
   display: flex;
@@ -373,7 +340,7 @@ function handleLogout() {
   overflow-y: auto; /* Scroll acontece aqui */
 }
 
-/* MAIN CONTENT */
+/* --- MAIN CONTENT --- */
 .main-content { 
   flex: 1; /* Empurra o footer para baixo */
   padding: 2rem; 
@@ -451,6 +418,9 @@ function handleLogout() {
 
 .empty-state { text-align: center; padding: 3rem; color: #64748b; font-size: 1.1rem; }
 .loading-state { text-align: center; padding: 3rem; color: #64748b; }
+.spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 10px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .btn-create { margin-top: 1rem; padding: 0.8rem 1.5rem; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
 .fade-in { animation: fadeIn 0.4s ease-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -458,8 +428,7 @@ function handleLogout() {
 /* Responsivo */
 @media (max-width: 768px) {
   .app-layout { flex-direction: column; overflow: auto; }
-  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #e5e7eb; padding: 1rem; position: relative; }
-  .main-content { padding: 1rem; overflow: visible; height: auto; }
   .main-wrapper { height: auto; overflow-y: visible; }
+  .content-wrapper { padding: 1.5rem; }
 }
 </style>

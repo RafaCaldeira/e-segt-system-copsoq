@@ -3,6 +3,9 @@ import { ref, computed } from 'vue';
 import { apiService } from '../services/api.service';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../store/user';
+// 1. IMPORTAR COMPONENTES PADRÃO
+import AppSidebar from '../components/AppSidebar.vue';
+import AppFooter from '../components/AppFooter.vue';
 
 // --- TIPOS ---
 interface QuestionarioCreateDto {
@@ -34,7 +37,6 @@ interface DimensaoLocal {
 // --- CONFIG ---
 const router = useRouter();
 const userStore = useUserStore();
-const displayName = computed(() => userStore.userRole || 'Admin');
 
 // --- ESTADO ---
 const step = ref(1); 
@@ -64,12 +66,7 @@ const dimensoes = ref<DimensaoLocal[]>([]);
 
 // --- AÇÕES ---
 
-function handleLogout() {
-  userStore.logout();
-  router.push('/login');
-}
-
-// Navegação entre passos (apenas visual se já estiver salvo)
+// Navegação entre passos
 function prevStep() {
   if (step.value > 1) step.value--;
 }
@@ -178,7 +175,7 @@ async function finalizarCadastro() {
       }
     }
     alert('Questionário criado com sucesso!');
-    router.push('/dashboard');
+    router.push('/dashboard'); // Redireciona para o Admin
   } catch (e) {
     console.error(e);
     alert('Erro ao salvar estrutura.');
@@ -191,147 +188,137 @@ async function finalizarCadastro() {
 <template>
   <div class="app-layout">
     
-    <nav class="sidebar">
-      <div class="logo-area">
-        <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
-      </div>
-      
-      <div class="user-badge">{{ displayName }}</div>
+    <AppSidebar />
 
-      <ul class="sidebar-nav">
-        <li><router-link to="/criar-questionario"><span class="icon">📝</span> Criar Questionário</router-link></li>
-        <li><router-link to="/disparo"><span class="icon">📨</span> Enviar Questionário</router-link></li>
-        <li><router-link to="/relatorio"><span class="icon">📊</span> Relatórios</router-link></li>
-        <li><router-link to="/plano-de-acao"><span class="icon">📋</span> Plano de Ação</router-link></li>
-        <li><router-link to="/historico"><span class="icon">📜</span> Histórico</router-link></li>
-        <li class="logout-item"><a @click.prevent="handleLogout" href="#"><span class="icon">🚪</span> Sair</a></li>
-      </ul>
-    </nav>
-
-    <main class="main-content">
-      <div class="content-wrapper">
-        
-        <header class="page-header">
-          <div>
-            <h1 class="content-title">Criar Novo Formulário</h1>
-            <p class="subtitle">Defina as perguntas e escalas para uma nova avaliação.</p>
-          </div>
+    <div class="main-wrapper">
+      <main class="main-content">
+        <div class="content-wrapper">
           
-          <div class="progress-bar">
-             <div class="progress-step" :class="{ active: step >= 1 }">1</div>
-             <div class="progress-line"></div>
-             <div class="progress-step" :class="{ active: step >= 2 }">2</div>
-             <div class="progress-line"></div>
-             <div class="progress-step" :class="{ active: step >= 3 }">3</div>
-          </div>
-        </header>
+          <header class="page-header">
+            <div>
+              <h1 class="content-title">Criar Novo Formulário</h1>
+              <p class="subtitle">Defina as perguntas e escalas para uma nova avaliação.</p>
+            </div>
+            
+            <div class="progress-bar">
+               <div class="progress-step" :class="{ active: step >= 1 }">1</div>
+               <div class="progress-line"></div>
+               <div class="progress-step" :class="{ active: step >= 2 }">2</div>
+               <div class="progress-line"></div>
+               <div class="progress-step" :class="{ active: step >= 3 }">3</div>
+            </div>
+          </header>
 
-        <div v-if="step === 1" class="step-container fade-in">
-          <div class="step-header">
-            <h2>Informações Básicas</h2>
-            <p>Configure a apresentação do questionário.</p>
-          </div>
+          <div v-if="step === 1" class="step-container fade-in">
+            <div class="step-header">
+              <h2>Informações Básicas</h2>
+              <p>Configure a apresentação do questionário.</p>
+            </div>
 
-          <div class="form-group">
-            <label>Título do Questionário <span class="required">*</span></label>
-            <input v-model="questionarioData.titulo" type="text" placeholder="Ex: Avaliação de Riscos Psicossociais" class="input-field" />
-          </div>
+            <div class="form-group">
+              <label>Título do Questionário <span class="required">*</span></label>
+              <input v-model="questionarioData.titulo" type="text" placeholder="Ex: Avaliação de Riscos Psicossociais" class="input-field" />
+            </div>
 
-          <div class="form-group">
-            <label>Descrição (Interna)</label>
-            <textarea v-model="questionarioData.descricao" rows="2" placeholder="Descrição para controle administrativo..." class="input-field"></textarea>
-          </div>
+            <div class="form-group">
+              <label>Descrição (Interna)</label>
+              <textarea v-model="questionarioData.descricao" rows="2" placeholder="Descrição para controle administrativo..." class="input-field"></textarea>
+            </div>
 
-          <div class="form-group">
-            <label>Texto de Introdução</label>
-            <textarea v-model="questionarioData.textoIntroducao" rows="4" placeholder="Mensagem de boas-vindas ao funcionário..." class="input-field"></textarea>
-          </div>
+            <div class="form-group">
+              <label>Texto de Introdução</label>
+              <textarea v-model="questionarioData.textoIntroducao" rows="4" placeholder="Mensagem de boas-vindas ao funcionário..." class="input-field"></textarea>
+            </div>
 
-          <div class="form-group">
-            <label>Termo de Consentimento</label>
-            <textarea v-model="questionarioData.textoConsentimento" rows="3" placeholder="Termos legais ou LGPD..." class="input-field"></textarea>
-          </div>
+            <div class="form-group">
+              <label>Termo de Consentimento</label>
+              <textarea v-model="questionarioData.textoConsentimento" rows="3" placeholder="Termos legais ou LGPD..." class="input-field"></textarea>
+            </div>
 
-          <div class="actions-right">
-            <button class="btn-primary" @click="criarQuestionarioBase" :disabled="isLoading">
-              {{ isLoading ? 'Salvando...' : 'Próximo: Escala →' }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="step === 2" class="step-container fade-in">
-          <div class="step-header">
-            <h2>Escala de Resposta</h2>
-            <p>Defina as opções (Likert) disponíveis para o usuário.</p>
-          </div>
-
-          <div class="escala-lista">
-            <div v-for="(opcao, index) in escalaOpcoes" :key="index" class="opcao-card">
-              <div class="drag-handle">☰</div>
-              <div class="opcao-valor-badge">{{ opcao.valor }}</div>
-              <input v-model="opcao.texto" placeholder="Texto da opção" class="input-clean" />
-              <button class="btn-icon-remove" @click="escalaOpcoes.splice(index, 1)" title="Remover">✕</button>
+            <div class="actions-right">
+              <button class="btn-primary" @click="criarQuestionarioBase" :disabled="isLoading">
+                {{ isLoading ? 'Salvando...' : 'Próximo: Escala →' }}
+              </button>
             </div>
           </div>
 
-          <button class="btn-secondary small" @click="escalaOpcoes.push({ texto: '', valor: escalaOpcoes.length + 1, ordem: escalaOpcoes.length + 1 })">
-            + Adicionar Opção
-          </button>
+          <div v-if="step === 2" class="step-container fade-in">
+            <div class="step-header">
+              <h2>Escala de Resposta</h2>
+              <p>Defina as opções (Likert) disponíveis para o usuário.</p>
+            </div>
 
-          <div class="actions-between">
-            <button class="btn-outline" @click="prevStep">← Voltar</button>
-            <button class="btn-primary" @click="salvarEscala" :disabled="isLoading">
-              {{ isLoading ? 'Salvando...' : 'Próximo: Perguntas →' }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="step === 3" class="step-container fade-in">
-          <div class="step-header">
-            <h2>Estrutura do Questionário</h2>
-            <p>Organize as perguntas dentro de Tópicos/Dimensões.</p>
-          </div>
-
-          <div v-if="dimensoes.length === 0" class="empty-state">
-            <p>Nenhum tópico criado.</p>
-            <button class="btn-primary" @click="addDimensao">Começar Adicionando um Tópico</button>
-          </div>
-
-          <div v-else class="dimensoes-wrapper">
-            <div v-for="(dim, index) in dimensoes" :key="dim.tempId" class="dimensao-card">
-              <div class="dimensao-top">
-                 <div class="inputs-dimensao">
-                   <input v-model="dim.titulo" class="input-titulo-dim" placeholder="Título do Tópico (Ex: Demanda de Trabalho)" />
-                   <input v-model="dim.nomeIndicador" class="input-sub-dim" placeholder="Nome curto para relatório (Opcional)" />
-                 </div>
-                 <button class="btn-remove-dim" @click="removeDimensao(index)">Excluir Tópico</button>
+            <div class="escala-lista">
+              <div v-for="(opcao, index) in escalaOpcoes" :key="index" class="opcao-card">
+                <div class="drag-handle">☰</div>
+                <div class="opcao-valor-badge">{{ opcao.valor }}</div>
+                <input v-model="opcao.texto" placeholder="Texto da opção" class="input-clean" />
+                <button class="btn-icon-remove" @click="escalaOpcoes.splice(index, 1)" title="Remover">✕</button>
               </div>
+            </div>
 
-              <div class="perguntas-list">
-                <div v-for="(perg, pIndex) in dim.perguntas" :key="pIndex" class="pergunta-row">
-                  <span class="bullet-p">•</span>
-                  <input v-model="perg.texto" class="input-pergunta" placeholder="Digite a pergunta..." />
-                  <button class="btn-icon-remove small" @click="removePergunta(index, pIndex)">✕</button>
+            <button class="btn-secondary small" @click="escalaOpcoes.push({ texto: '', valor: escalaOpcoes.length + 1, ordem: escalaOpcoes.length + 1 })">
+              + Adicionar Opção
+            </button>
+
+            <div class="actions-between">
+              <button class="btn-outline" @click="prevStep">← Voltar</button>
+              <button class="btn-primary" @click="salvarEscala" :disabled="isLoading">
+                {{ isLoading ? 'Salvando...' : 'Próximo: Perguntas →' }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="step === 3" class="step-container fade-in">
+            <div class="step-header">
+              <h2>Estrutura do Questionário</h2>
+              <p>Organize as perguntas dentro de Tópicos/Dimensões.</p>
+            </div>
+
+            <div v-if="dimensoes.length === 0" class="empty-state">
+              <p>Nenhum tópico criado.</p>
+              <button class="btn-primary" @click="addDimensao">Começar Adicionando um Tópico</button>
+            </div>
+
+            <div v-else class="dimensoes-wrapper">
+              <div v-for="(dim, index) in dimensoes" :key="dim.tempId" class="dimensao-card">
+                <div class="dimensao-top">
+                   <div class="inputs-dimensao">
+                     <input v-model="dim.titulo" class="input-titulo-dim" placeholder="Título do Tópico (Ex: Demanda de Trabalho)" />
+                     <input v-model="dim.nomeIndicador" class="input-sub-dim" placeholder="Nome curto para relatório (Opcional)" />
+                   </div>
+                   <button class="btn-remove-dim" @click="removeDimensao(index)">Excluir Tópico</button>
                 </div>
-                <button class="btn-add-p" @click="addPergunta(index)">+ Nova Pergunta</button>
+
+                <div class="perguntas-list">
+                  <div v-for="(perg, pIndex) in dim.perguntas" :key="pIndex" class="pergunta-row">
+                    <span class="bullet-p">•</span>
+                    <input v-model="perg.texto" class="input-pergunta" placeholder="Digite a pergunta..." />
+                    <button class="btn-icon-remove small" @click="removePergunta(index, pIndex)">✕</button>
+                  </div>
+                  <button class="btn-add-p" @click="addPergunta(index)">+ Nova Pergunta</button>
+                </div>
               </div>
+
+              <button class="btn-secondary dashed full-width" @click="addDimensao">
+                + Adicionar Outro Tópico
+              </button>
             </div>
 
-            <button class="btn-secondary dashed full-width" @click="addDimensao">
-              + Adicionar Outro Tópico
-            </button>
+            <div class="actions-between top-margin">
+              <button class="btn-outline" @click="prevStep">← Voltar</button>
+              <button class="btn-success" @click="finalizarCadastro" :disabled="isLoading">
+                {{ isLoading ? 'Finalizando...' : '✅ Salvar Tudo' }}
+              </button>
+            </div>
           </div>
 
-          <div class="actions-between top-margin">
-            <button class="btn-outline" @click="prevStep">← Voltar</button>
-            <button class="btn-success" @click="finalizarCadastro" :disabled="isLoading">
-              {{ isLoading ? 'Finalizando...' : '✅ Salvar Tudo' }}
-            </button>
-          </div>
         </div>
+      </main>
 
-      </div>
-    </main>
+      <AppFooter />
+    </div>
+
   </div>
 </template>
 
@@ -339,35 +326,28 @@ async function finalizarCadastro() {
 /* --- Layout Global --- */
 :global(html), :global(body), :global(#app) {
   height: 100%; margin: 0; padding: 0; overflow: hidden;
-  font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5;
 }
+:global(body) { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
 
 .app-layout { display: flex; height: 100%; width: 100%; }
 
-/* --- Sidebar (Padronizada) --- */
-.sidebar {
-  width: 260px; background: white; border-right: 1px solid #e5e7eb;
-  display: flex; flex-direction: column; padding: 1.5rem 1rem; flex-shrink: 0; z-index: 10;
+/* --- Main Wrapper --- */
+.main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;
 }
-.sidebar-logo { width: 120px; display: block; margin: 0 auto 1.5rem auto; }
-.user-badge { background: #f3f4f6; padding: 0.5rem; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 1.5rem; color: #374151; }
-.sidebar-nav { list-style: none; padding: 0; margin: 0; flex: 1; }
-.sidebar-nav li { margin-bottom: 5px; }
-.sidebar-nav a { display: flex; align-items: center; padding: 0.75rem 1rem; color: #4b5563; text-decoration: none; border-radius: 6px; font-weight: 500; transition: all 0.2s; }
-.sidebar-nav a:hover { background: #f3f4f6; color: #111; }
-.sidebar-nav li.active a { background: #eff6ff; color: #2563eb; font-weight: 600; }
-.sidebar-nav .icon { margin-right: 10px; min-width: 24px; text-align: center; }
-.logout-item { margin-top: auto; border-top: 1px solid #f3f4f6; padding-top: 1rem; }
-.logout-item a { color: #ef4444; }
 
 /* --- Main Content --- */
 .main-content {
   flex: 1; background-color: #f0f2f5; padding: 2rem;
-  overflow-y: auto; display: flex; justify-content: center; align-items: flex-start;
+  display: flex; justify-content: center; align-items: flex-start;
 }
 .content-wrapper {
   max-width: 900px; width: 100%; background: white; padding: 2.5rem;
-  border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 3rem;
+  border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 2rem;
 }
 
 /* --- Header & Progress --- */
@@ -461,4 +441,12 @@ label { display: block; font-weight: 600; font-size: 0.95rem; margin-bottom: 0.5
 .empty-state { text-align: center; padding: 4rem; background: #f9fafb; border-radius: 8px; border: 2px dashed #e5e7eb; margin-bottom: 2rem; }
 .fade-in { animation: fadeIn 0.3s ease-in-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Responsivo */
+@media (max-width: 768px) {
+  .app-layout { flex-direction: column; overflow: auto; }
+  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #e5e7eb; padding: 1rem; }
+  .main-wrapper { height: auto; overflow-y: visible; }
+  .content-wrapper { padding: 1.5rem; }
+}
 </style>

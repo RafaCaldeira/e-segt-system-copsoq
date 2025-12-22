@@ -6,8 +6,9 @@ import { useRouter } from 'vue-router';
 import type { Empresa } from '../types/empresa.types';
 import type { Funcionario } from '../types/funcionario.types';
 import type { DisparoCreateDto } from '../types/disparo.types';
-// 1. IMPORTAR O FOOTER
+// 1. IMPORTAR COMPONENTES PADRÃO
 import AppFooter from '../components/AppFooter.vue';
+import AppSidebar from '../components/AppSidebar.vue';
 
 // --- Interfaces Locais ---
 interface SetorObjeto {
@@ -39,15 +40,6 @@ const selectedQuestionarioId = ref<number | null>(null);
 const selectedSetor = ref<string>(''); 
 const selectedFuncionariosIds = ref<number[]>([]);
 const allSelected = ref(false);
-
-// Permissões
-const displayName = computed(() => userStore.nomeEmpresa || userStore.userRole);
-
-// --- Logout ---
-function handleLogout() {
-  userStore.logout();
-  router.push('/login');
-}
 
 // --- COMPUTED ---
 const setoresDisponiveis = computed(() => {
@@ -97,6 +89,8 @@ watch(selectedEmpresaId, async (newId) => {
     try {
       const data = await apiService.getFuncionarios(); 
       if (data) {
+        // Filtra os funcionários da empresa selecionada
+        // (Nota: Idealmente o backend teria um endpoint /empresa/{id}/funcionarios)
         funcionarios.value = data.filter((f: any) => {
            const fEmpresaId = f.empresaID || f.EmpresaID || f.empresaId;
            return Number(fEmpresaId) === Number(newId);
@@ -111,7 +105,7 @@ watch(selectedEmpresaId, async (newId) => {
   }
 });
 
-// --- FUNÇÃO NOVA: Alternar seleção ao clicar na linha ---
+// --- FUNÇÕES ---
 function toggleSelection(id: number) {
   const index = selectedFuncionariosIds.value.indexOf(id);
   if (index > -1) {
@@ -123,7 +117,6 @@ function toggleSelection(id: number) {
 
 // --- LOAD INICIAL ---
 onMounted(async () => {
-  // Apenas Admin pode acessar esta tela
   if (!userStore.isAdmin) {
     router.push('/dashboard');
     return;
@@ -180,46 +173,16 @@ async function enviarDisparos() {
 <template>
   <div class="app-layout">
     
-    <nav class="sidebar">
-      <div class="logo-area">
-        <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
-      </div>
-      
-      <div class="user-badge">{{ displayName }}</div>
-
-      <ul class="sidebar-nav">
-        <li v-if="userStore.isAdmin">
-          <router-link to="/criar-questionario"><span class="icon">📝</span> Criar Questionário</router-link>
-        </li>
-        <li v-if="userStore.isAdmin" class="active">
-          <router-link to="/disparo"><span class="icon">📨</span> Enviar Questionário</router-link>
-        </li>
-
-        <li v-if="userStore.isCliente">
-            <router-link to="/editar-cadastro"><span class="icon">⚙️</span> Editar Cadastro</router-link>
-        </li>
-        <li v-if="userStore.isCliente">
-            <router-link to="/funcionario"><span class="icon">👥</span> Funcionários</router-link>
-        </li>
-
-        <li v-if="userStore.userRole === 'Psicologo'">
-            <router-link to="/psicologo"><span class="icon">🧠</span> Área do Psicólogo</router-link>
-        </li>
-
-        <li><router-link to="/plano-de-acao"><span class="icon">📋</span> Plano de Ação</router-link></li>
-        <li><router-link to="/relatorio"><span class="icon">📊</span> Relatórios</router-link></li>
-        <li><router-link to="/historico"><span class="icon">📜</span> Histórico</router-link></li>
-        
-        <li class="logout-item"><a @click.prevent="handleLogout" href="#"><span class="icon">🚪</span> Sair</a></li>
-      </ul>
-    </nav>
+    <AppSidebar />
 
     <div class="main-wrapper">
       <main class="main-content">
         <div class="content-wrapper">
           
-          <h1 class="page-title">Disparar Formulários</h1>
-          <p class="page-desc">Selecione a empresa e o questionário para enviar aos colaboradores.</p>
+          <header class="page-header">
+            <h1 class="page-title">Disparar Formulários</h1>
+            <p class="page-desc">Selecione a empresa e o questionário para enviar aos colaboradores.</p>
+          </header>
 
           <div v-if="message" :class="['alert', message.type === 'success' ? 'alert-success' : 'alert-error']">
             {{ message.text }}
@@ -344,40 +307,18 @@ async function enviarDisparos() {
   width: 100%; 
 }
 
-/* Sidebar */
-.sidebar { 
-  width: 260px; 
-  background-color: #ffffff; 
-  border-right: 1px solid #e5e7eb; 
-  display: flex; 
-  flex-direction: column; 
-  padding: 1.5rem 1rem; 
-  flex-shrink: 0; 
-  z-index: 10;
-}
-.sidebar-logo { width: 120px; display: block; margin: 0 auto 1.5rem auto; }
-.user-badge { background: #f3f4f6; padding: 0.5rem; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 1.5rem; color: #374151; }
-.sidebar-nav { list-style: none; padding: 0; margin: 0; flex: 1; overflow-y: auto; }
-.sidebar-nav li { margin-bottom: 5px; }
-.sidebar-nav a { display: flex; align-items: center; padding: 0.75rem 1rem; color: #4b5563; text-decoration: none; border-radius: 6px; font-weight: 500; transition: all 0.2s; }
-.sidebar-nav a:hover { background: #f3f4f6; color: #111; }
-.sidebar-nav li.active a { background: #eff6ff; color: #2563eb; font-weight: 600; }
-.sidebar-nav .icon { margin-right: 10px; min-width: 20px; text-align: center; }
-.logout-item { margin-top: auto; border-top: 1px solid #f3f4f6; padding-top: 1rem; }
-.logout-item a { color: #ef4444; }
-
-/* --- MAIN WRAPPER (Novo container flex column) --- */
+/* --- MAIN WRAPPER --- */
 .main-wrapper {
   flex: 1;
   display: flex;
   flex-direction: column;
-  height: 100vh; /* Altura total da viewport */
+  height: 100vh;
   overflow-y: auto; /* Scroll acontece aqui */
 }
 
 /* --- MAIN CONTENT --- */
 .main-content { 
-  flex: 1; /* Empurra o footer para baixo */
+  flex: 1;
   padding: 2rem; 
   display: flex; 
   justify-content: center; 
@@ -388,6 +329,7 @@ async function enviarDisparos() {
 .content-wrapper { max-width: 1000px; width: 100%; background-color: #ffffff; padding: 2.5rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 2rem; }
 .page-title { font-size: 1.8rem; color: #1f2937; margin: 0 0 0.5rem 0; }
 .page-desc { color: #6b7280; margin-bottom: 2rem; }
+.page-header { margin-bottom: 2rem; border-bottom: 1px solid #f3f4f6; padding-bottom: 1rem; }
 
 /* FILTROS */
 .filters-card { background: #f9fafb; padding: 1.5rem; border-radius: 8px; border: 1px solid #e5e7eb; margin-bottom: 2rem; }
@@ -426,7 +368,6 @@ async function enviarDisparos() {
 /* Responsivo */
 @media (max-width: 768px) {
   .app-layout { flex-direction: column; overflow: auto; }
-  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid #e5e7eb; padding: 1rem; }
   .main-wrapper { height: auto; overflow-y: visible; }
   .content-wrapper { padding: 1.5rem; }
 }

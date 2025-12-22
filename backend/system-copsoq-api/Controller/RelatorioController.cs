@@ -98,22 +98,31 @@ namespace system_copsoq_api.Controllers
             foreach (var grupo in respostasPorDimensao)
             {
                 var dimensao = questionario.Dimensoes.FirstOrDefault(d => d.ID == grupo.Key);
-                if (dimensao == null) continue; // Ignora se a dimensão não for encontrada
+                if (dimensao == null) continue;
 
-                // Calcular a Média (como o seu PDF de Apoio Social pede [cite: 36-39])
-                var media = grupo.Average(r => r.ValorResposta);
+                // --- CORREÇÃO DO CÁLCULO DA MÉDIA ---
+                // 1. Filtra apenas respostas que têm número (.HasValue)
+                // 2. Converte para Double para garantir precisão decimal
+                // 3. Se não houver números (só texto), usa 0 como padrão para não quebrar
+                double media = grupo
+                    .Where(r => r.ValorResposta.HasValue)
+                    .Select(r => (double)r.ValorResposta.Value)
+                    .DefaultIfEmpty(0)
+                    .Average();
 
-                // Aplicar as Regras de Risco
-                // TODO: Tornar esta função dinâmica para o Burnout (0-6) [cite: 43-45]
-                string nivelRisco = CalcularNivelRiscoApoioSocial(media); // Função auxiliar
+                // Se a média for 0 (significa que só teve texto ou ninguém respondeu), 
+                // podemos decidir não gerar gráfico ou mostrar 0%.
+                
+                // Calcular Nível de Risco (Sua função auxiliar)
+                string nivelRisco = CalcularNivelRiscoApoioSocial(media); 
 
                 relatorio.Resultados.Add(new ResultadoIndicadorDto
                 {
                     NomeIndicador = dimensao.NomeIndicador,
-                    // Convertendo a média (1-5) para percentual (0-100)
-                    // (Valor - Mín) / (Máx - Mín)
-                    // (media - 1) / (5 - 1) * 100
-                    ScorePercentual = Math.Round((media - 1) / 4 * 100, 1), // Ex: 3.8 -> 70.0
+                    
+                    // Agora 'media' é um double garantido, então a matemática funciona:
+                    ScorePercentual = Math.Round((media - 1) / 4 * 100, 1), 
+                    
                     NivelRisco = nivelRisco
                 });
             }

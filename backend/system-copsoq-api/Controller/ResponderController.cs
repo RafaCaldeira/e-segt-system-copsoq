@@ -15,7 +15,7 @@ namespace system_copsoq_api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [AllowAnonymous] // Permite acesso sem login (crucial para o funcionário responder)
+    [AllowAnonymous] // Permite acesso sem login
     public class ResponderController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -27,7 +27,6 @@ namespace system_copsoq_api.Controllers
 
         // ---------------------------------------------------------
         // 1. GET: Puxar o questionário completo pelo Token
-        // Rota: GET api/responder/{token}
         // ---------------------------------------------------------
         [HttpGet("{token}")]
         public async Task<ActionResult<QuestionarioParaResponderDto>> GetQuestionarioPeloToken(string token)
@@ -35,13 +34,12 @@ namespace system_copsoq_api.Controllers
             if (!Guid.TryParse(token, out var tokenGuid))
                 return BadRequest("Token inválido.");
 
-            // Busca o Disparo e carrega toda a árvore de dados necessária
             var disparo = await _context.Disparos
                 .Include(d => d.Funcionario)
                     .ThenInclude(f => f.Empresa)
                 .Include(d => d.Questionario)
                     .ThenInclude(q => q.Dimensoes)
-                        .ThenInclude(dim => dim.Perguntas) // Carrega perguntas dentro das dimensões
+                        .ThenInclude(dim => dim.Perguntas)
                 .Include(d => d.Questionario)
                     .ThenInclude(q => q.OpcoesResposta)
                 .FirstOrDefaultAsync(d => d.TokenAcesso == tokenGuid);
@@ -52,8 +50,7 @@ namespace system_copsoq_api.Controllers
             if (disparo.Respondido)
                 return BadRequest("Este questionário já foi respondido.");
 
-            // Mapeamento Manual: Entidade -> DTO
-            // (Assumindo que você tem os DTOs auxiliares: DimensaoRespostaDto, PerguntaRespostaDto, etc.)
+            // Mapeamento para DTO
             var dto = new QuestionarioParaResponderDto
             {
                 Id = disparo.Questionario.ID,
@@ -61,34 +58,29 @@ namespace system_copsoq_api.Controllers
                 TextoIntroducao = disparo.Questionario.TextoIntroducao,
                 TextoConsentimento = disparo.Questionario.TextoConsentimento,
                 
-                // Mapeia Funcionário
                 Funcionario = new FuncionarioSimplesDto
                 {
                     Nome = disparo.Funcionario.Nome,
                     Cpf = disparo.Funcionario.CPF, 
                     Setor = disparo.Funcionario.Setor.ToString(),
-                    NomeEmpresa = disparo.Funcionario.Empresa != null ? disparo.Funcionario.Empresa.NomeEmpresa : "Empresa"
+                    NomeEmpresa = disparo.Funcionario.Empresa?.NomeEmpresa ?? "Empresa"
                 },
 
-                // Mapeia Opções de Resposta
                 OpcoesResposta = disparo.Questionario.OpcoesResposta
                     .OrderBy(o => o.Ordem)
                     .Select(o => new OpcaoRespostaDto 
                     {
-                        // Ajuste os nomes das propriedades conforme seu OpcaoRespostaDto
                         Texto = o.Texto,
                         Valor = o.Valor,
                         Ordem = o.Ordem
                     }).ToList(),
 
-                // Mapeia Dimensões e Perguntas (A parte mais importante)
                 Dimensoes = disparo.Questionario.Dimensoes
                     .OrderBy(dim => dim.Ordem)
                     .Select(dim => new DimensaoRespostaDto
                     {
                         Id = dim.ID,
                         Titulo = dim.Titulo,
-                        // Assumindo que seu DimensaoRespostaDto tem uma lista de PerguntaRespostaDto
                         Perguntas = dim.Perguntas.Select(p => new PerguntaRespostaDTO
                         {
                             Id = p.ID,
@@ -101,68 +93,94 @@ namespace system_copsoq_api.Controllers
         }
 
         // ---------------------------------------------------------
-        // 2. POST: Receber e Salvar as Respostas
-        // Rota: POST api/responder/{token}
+        // 2. POST: Receber e Salvar as Respostas (CORRIGIDO)
         // ---------------------------------------------------------
         [HttpPost("{token}")]
         public async Task<IActionResult> EnviarRespostas(string token, [FromBody] SubmissaoDto submissao)
         {
+            // 1. Basic Model Validation
             if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            {
+                var erros = string.Join("; ", ModelState.Values
+                                    .SelectMany(v => v.Errors)
+                                    .Select(e => e.ErrorMessage));
+                return BadRequest($"Dados inválidos: {erros}");
+            }
 
             if (!Guid.TryParse(token, out var tokenGuid))
                 return BadRequest("Token inválido.");
 
-            // 1. Busca o Disparo para validar
-            var disparo = await _context.Disparos
-                .Include(d => d.Funcionario) // Precisamos do funcionário para checar o CPF se necessário
-                .FirstOrDefaultAsync(d => d.TokenAcesso == tokenGuid);
-
-            if (disparo == null) return NotFound("Disparo não encontrado.");
-            
-            if (disparo.Respondido) 
-                return BadRequest("Você já respondeu este questionário.");
-
-            // 2. Validação Opcional de CPF
-            // Compara o CPF enviado no JSON com o CPF do funcionário no banco
-            // Remove pontuação para evitar erros (ex: "123.456" vs "123456")
-            /*
-            var cpfBanco = disparo.Funcionario.CPF?.Replace(".", "").Replace("-", "").Trim();
-            var cpfEnviado = submissao.Cpf?.Replace(".", "").Replace("-", "").Trim();
-
-            if (cpfBanco != cpfEnviado)
+            try 
             {
-                 return BadRequest("O CPF informado não corresponde ao funcionário deste link.");
-            }
-            */
+                var disparo = await _context.Disparos
+                    .Include(d => d.Funcionario)
+                    .FirstOrDefaultAsync(d => d.TokenAcesso == tokenGuid);
 
-            // 3. Processar as Respostas
-            var novasRespostas = new List<RespostaFuncionario>();
+                if (disparo == null) return NotFound("Disparo não encontrado.");
+                
+                if (disparo.Respondido) 
+                    return BadRequest("Você já respondeu este questionário.");
 
-            foreach (var respDto in submissao.Respostas)
-            {
-                var novaResposta = new RespostaFuncionario
+                // 2. Duplicate Protection (Crucial Fix)
+                // Groups by QuestionId and takes the first answer to prevent DB constraint errors
+                var respostasUnicas = submissao.Respostas
+                                        .GroupBy(r => r.PerguntaId)
+                                        .Select(g => g.First())
+                                        .ToList();
+
+                var novasRespostas = new List<RespostaFuncionario>();
+
+                foreach (var respDto in respostasUnicas)
                 {
-                    DisparoID = disparo.ID,
-                    PerguntaID = respDto.PerguntaId,
-                    ValorResposta = respDto.ValorResposta // Mapeia ValorResposta do DTO para Valor da Model
-                };
-                novasRespostas.Add(novaResposta);
+                    var novaResposta = new RespostaFuncionario
+                    {
+                        DisparoID = disparo.ID,
+                        PerguntaID = respDto.PerguntaId
+                    };
+
+                    // Logic to determine what to save
+                    if (!string.IsNullOrEmpty(respDto.TextoResposta))
+                    {
+                        // It's a text answer
+                        novaResposta.TextoResposta = respDto.TextoResposta;
+                    }
+                    else if (respDto.ValorResposta.HasValue)
+                    {
+                        // It's a numeric answer
+                        novaResposta.ValorResposta = respDto.ValorResposta.Value;
+                    }
+
+                    // Optional: Skip if both are empty (unless you want to allow empty answers)
+                    if (string.IsNullOrEmpty(novaResposta.TextoResposta) && novaResposta.ValorResposta == null)
+                    {
+                        continue; 
+                    }
+
+                    novasRespostas.Add(novaResposta);
+                }
+
+                if (!novasRespostas.Any())
+                    return BadRequest("Nenhuma resposta válida foi enviada.");
+
+                _context.RespostasFuncionarios.AddRange(novasRespostas);
+
+                disparo.Respondido = true;
+                disparo.DataResposta = DateTime.UtcNow;
+                
+                await _context.SaveChangesAsync();
+
+                return Ok(new { Message = "Respostas salvas com sucesso!" });
             }
-
-            if (!novasRespostas.Any())
-                return BadRequest("Nenhuma resposta foi enviada.");
-
-            // 4. Salvar tudo no Banco
-            _context.RespostasFuncionarios.AddRange(novasRespostas);
-
-            // Atualiza status do Disparo
-            disparo.Respondido = true;
-            disparo.DataResposta = DateTime.UtcNow;
-            
-            await _context.SaveChangesAsync();
-
-            return Ok(new { Message = "Respostas salvas com sucesso! Obrigado pela participação." });
+            catch (DbUpdateException dbEx)
+            {
+                // returns the specific DB error (e.g., duplicate key)
+                var innerMessage = dbEx.InnerException?.Message ?? dbEx.Message;
+                return BadRequest($"Erro ao salvar no banco de dados: {innerMessage}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erro interno no servidor: {ex.Message}");
+            }
         }
     }
 }
