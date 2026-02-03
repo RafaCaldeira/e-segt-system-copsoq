@@ -88,17 +88,26 @@ async function handleFileUpload(event: Event) {
   try {
     const result = await apiService.importarFuncionariosCsv(file);
 
-    if (result?.success) {
+    // Agora tratamos o caso de sucesso ou erro baseado na estrutura do JSON
+    if (result && result.success) {
       successMessage.value = result.message ?? 'Importação concluída com sucesso.';
       if (result.erros && result.erros.length > 0) {
         importErrors.value = result.erros;
       }
       await carregarFuncionarios();
     } else {
+      // Caso o backend retorne um JSON de erro esperado { success: false, message: "..." }
       errorMessage.value = result?.message ?? 'Falha na importação do arquivo.';
     }
-  } catch (e) {
-    errorMessage.value = "Erro ao enviar arquivo.";
+  } catch (e: any) {
+    // AQUI É A CHAVE: Capturamos o erro de parsing ou de rede
+    console.error("Erro detalhado:", e);
+    
+    if (e.message.includes("Unexpected token 'E'")) {
+      errorMessage.value = "O servidor retornou um erro inesperado (provavelmente uma falha no código do backend). Verifique o console ou o log do servidor.";
+    } else {
+      errorMessage.value = "Erro ao enviar arquivo para o servidor.";
+    }
   } finally {
     isImporting.value = false;
     target.value = ''; 

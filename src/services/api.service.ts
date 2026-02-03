@@ -302,31 +302,37 @@ async createOpcaoResposta(questionarioId: number, dto: OpcaoRespostaCreateDto): 
     }
   },
 async importarFuncionariosCsv(file: File): Promise<{ success: boolean; message: string; erros?: string[] }> {
+  try {
+    const formData = new FormData();
+    formData.append('file', file); // 'file' deve ser o nome que o C# espera no [FromForm]
+
+    const response = await fetch(`${API_BASE_URL}/funcionario/importar`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('user-token')}`
+        // NÃO coloque Content-Type aqui para FormData
+      },
+      body: formData // <--- ESSENCIAL: Envia o arquivo de fato
+    });
+
+    const responseText = await response.text();
+    let data;
+
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch(`${API_BASE_URL}/funcionario/importar`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('user-token')}`
-          // Nota: NÃO defina 'Content-Type' aqui! O browser define automaticamente como 'multipart/form-data' com o boundary correto.
-        },
-        body: formData
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        return { success: true, message: data.message, erros: data.erros };
-      } else {
-        return { success: false, message: data.title || 'Erro ao importar ficheiro.' };
-      }
-    } catch (error) {
-      console.error('Erro no upload:', error);
-      return { success: false, message: 'Falha na comunicação com a API.' };
+      data = JSON.parse(responseText);
+    } catch (e) {
+      return { success: false, message: responseText || 'Erro interno no servidor.' };
     }
-  },
+
+    if (response.ok) {
+      return { success: true, message: data.message, erros: data.erros };
+    } else {
+      return { success: false, message: data.message || data.title || 'Erro na validação do CSV.' };
+    }
+  } catch (error) {
+    return { success: false, message: 'Falha de conexão.' };
+  }
+},
 
 
 // **********************************

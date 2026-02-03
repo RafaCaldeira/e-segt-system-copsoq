@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useUserStore } from '../store/user';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router'; // <--- 1. ADICIONEI useRoute AQUI
 import type { DisparoHistoricoDto } from '../types/disparo.types';
 import type { Empresa } from '../types/empresa.types';
 import { apiService } from '../services/api.service';
-// 1. IMPORTAR COMPONENTES PADRÃO
 import AppFooter from '../components/AppFooter.vue';
 import AppSidebar from '../components/AppSidebar.vue';
 
 const userStore = useUserStore();
 const router = useRouter();
+const route = useRoute(); // <--- 2. INICIALIZEI A ROTA AQUI
 
 // Estado
 const historicoCompleto = ref<DisparoHistoricoDto[]>([]);
@@ -20,8 +20,6 @@ const isLoading = ref(true);
 
 // Permissões
 const podeFiltrar = computed(() => userStore.isAdmin || userStore.userRole === 'Psicologo');
-
-// Ações da Tabela (Copiar Link): Admin e Psicólogo podem ver
 const podeVerAcoesTabela = computed(() => userStore.isAdmin || userStore.userRole === 'Psicologo');
 
 onMounted(async () => {
@@ -29,6 +27,7 @@ onMounted(async () => {
   
   isLoading.value = true;
   try {
+    // 1. Buscar Empresas (se for admin/psicólogo)
     if (podeFiltrar.value) {
       const listaEmpresas = await apiService.getEmpresas();
       if (listaEmpresas) empresas.value = listaEmpresas;
@@ -36,16 +35,30 @@ onMounted(async () => {
       selectedEmpresaId.value = userStore.empresaId;
     }
 
+    // 2. Buscar Histórico
     const data = await apiService.getHistoricoDisparos();
     if (data) {
       historicoCompleto.value = data;
     }
+
+    // --- 3. A CORREÇÃO: VERIFICAR URL ---
+    // Se a URL tiver ?empresaId=5, vamos selecionar automaticamente
+    if (podeFiltrar.value && route.query.empresaId) {
+      const idDaUrl = Number(route.query.empresaId);
+      
+      // Verifica se o ID é válido e existe na lista carregada
+      if (!isNaN(idDaUrl)) {
+        selectedEmpresaId.value = idDaUrl;
+      }
+    }
+    // ------------------------------------
+
   } finally {
     isLoading.value = false;
   }
 });
 
-// --- COMPUTEDS ---
+// --- COMPUTEDS (Mantive igual) ---
 const historicoFiltrado = computed(() => {
   if (!selectedEmpresaId.value) return [];
   return historicoCompleto.value.filter(h => h.empresaId === selectedEmpresaId.value);

@@ -18,7 +18,9 @@ function handleLogout() {
 <template>
   <nav class="sidebar">
     <div class="logo-area">
-      <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      <router-link to="/dashboard">
+        <img src="../assets/e-segt.png" alt="E-SegT Logo" class="sidebar-logo">
+      </router-link>
     </div>
     
     <div class="user-badge">{{ displayName }}</div>
@@ -94,7 +96,18 @@ function handleLogout() {
   top: 0;
 }
 
-.sidebar-logo { width: 120px; display: block; margin: 0 auto 1.5rem auto; }
+/* Cursor pointer para indicar clique */
+.sidebar-logo { 
+  width: 120px; 
+  display: block; 
+  margin: 0 auto 1.5rem auto; 
+  cursor: pointer; 
+  transition: transform 0.2s;
+}
+
+.sidebar-logo:hover {
+  transform: scale(1.05);
+}
 
 .user-badge { 
   background: #f3f4f6; 
@@ -123,7 +136,6 @@ function handleLogout() {
 
 .sidebar-nav a:hover { background: #f3f4f6; color: #111; }
 
-/* Classe automática do Vue Router para link ativo */
 .active-link { background: #eff6ff !important; color: #2563eb !important; font-weight: 600; }
 
 .sidebar-nav .icon { margin-right: 10px; min-width: 20px; text-align: center; }
