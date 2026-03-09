@@ -219,17 +219,21 @@ export const apiService = {
     }
   },
 
-  async updateStatusAcao(acaoId: number, novoStatus: string): Promise<boolean> {
+  async updateStatusAcao(
+    acaoId: number, 
+    dados: { status: string; data_conclusao?: string | null; justificativa?: string | null }
+  ): Promise<boolean> {
     try {
       const response = await fetch(`${API_BASE_URL}/planodeacao/acao/${acaoId}/status`, {
         method: 'PUT',
         headers: {
-            ...getAuthHeaders(), // Mantém o token
-            'Content-Type': 'application/json' // Garante que o C# entenda que é JSON
+            ...getAuthHeaders(), 
+            'Content-Type': 'application/json'
         },
-        // O C# espera: { "Status": "Concluido" }
-        // Antes estava enviando apenas: "Concluido"
-        body: JSON.stringify({ status: novoStatus }) 
+        // MUDANÇA AQUI:
+        // Antes você enviava: { status: novoStatus }
+        // Agora você envia o objeto 'dados' inteiro, que já tem { status, data_conclusao, justificativa }
+        body: JSON.stringify(dados) 
       });
       return response.ok;
     } catch (error) {

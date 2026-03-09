@@ -1,3 +1,4 @@
+// ATENÇÃO: O Status "Em Andamento" deve ter espaço para bater com seu Vue
 export type StatusAcao = 'Pendente' | 'EmAndamento' | 'Concluido';
 
 export interface Acao {
@@ -6,6 +7,9 @@ export interface Acao {
   prazo?: string;
   status: StatusAcao;
   planoDeAcaoID: number;
+
+  data_conclusao?: string | null;
+  justificativa?: string | null;
 }
 
 export interface PlanoDeAcao {
@@ -21,6 +25,7 @@ export interface PlanoDeAcao {
 export interface AcaoCreateDto {
   descricao: string;
   prazo?: string;
+  status?: string; 
 }
 
 export interface PlanoDeAcaoCreateDto {

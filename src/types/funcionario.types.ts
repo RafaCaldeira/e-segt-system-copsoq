@@ -9,6 +9,7 @@ export interface Funcionario {
   setor: string;
   empresaID: number;
   cpf?: string;
+  tokenOuId?: string;
 }
 
 export interface FuncionarioCreateDto {

@@ -139,6 +139,36 @@ async function excluirFuncionario(id: number) {
     errorMessage.value = 'Erro de conexão ao excluir.';
   }
 }
+
+// --- FUNÇÃO DE WHATSAPP (NOVA) ---
+function enviarWhatsApp(funcionario: Funcionario) {
+  // 1. Validação básica
+  // Nota: Verifique se sua interface Funcionario já tem o campo 'telefone'. 
+  // Se não tiver, o TypeScript vai reclamar aqui.
+  if (!funcionario.telefone) {
+    alert("Este funcionário não possui telefone cadastrado.");
+    return;
+  }
+
+  // 2. Limpa o telefone (deixa só números)
+  // Ex: (11) 99999-8888 vira 11999998888
+  const foneLimpo = funcionario.telefone.replace(/\D/g, '');
+
+  // 3. Monta a mensagem
+const linkQuestionario = `${window.location.origin}/responder/${funcionario.tokenOuId || funcionario.id}`;
+  
+  const mensagem = `Olá ${funcionario.nome}! \n\n` +
+                   `Aqui está o link para responder sua avaliação de riscos psicossociais (COPSOQ): \n` +
+                   `${linkQuestionario} \n\n` +
+                   `Obrigado!`;
+
+  // 4. Cria a URL do WhatsApp Web
+  // "55" é o código do Brasil.
+  const url = `https://wa.me/55${foneLimpo}?text=${encodeURIComponent(mensagem)}`;
+
+  // 5. Abre em nova aba
+  window.open(url, '_blank');
+}
 </script>
 
 <template>
@@ -217,6 +247,8 @@ async function excluirFuncionario(id: number) {
                     <td><span class="badge">{{ func.setor }}</span></td>
                     <td class="mono">{{ func.cpf || '-' }}</td>
                     <td class="text-center actions-cell">
+                      <button class="btn-icon whatsapp" @click="enviarWhatsApp(func)" title="Enviar Link via WhatsApp">📱</button>
+                      
                       <button class="btn-icon edit" @click="editarFuncionario(func.id)" title="Editar">✏️</button>
                       <button class="btn-icon delete" @click="excluirFuncionario(func.id)" title="Excluir">🗑️</button>
                     </td>
@@ -362,6 +394,14 @@ async function excluirFuncionario(id: number) {
 .btn-icon:hover { transform: scale(1.1); background: #f1f5f9; }
 .edit { color: #f59e0b; }
 .delete { color: #ef4444; }
+
+/* ESTILO NOVO PARA O BOTÃO DO WHATSAPP */
+.whatsapp { 
+  color: #25D366; 
+}
+.whatsapp:hover { 
+  background: #dcfce7; /* Verde bem claro no hover */
+}
 
 /* Feedback */
 .alert { padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
