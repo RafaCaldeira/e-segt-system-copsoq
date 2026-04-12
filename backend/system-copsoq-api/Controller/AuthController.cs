@@ -69,7 +69,6 @@ namespace system_copsoq_api.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            // (Verifica se o email já existe)
             if (await _context.Usuarios.AnyAsync(u => u.Email == dto.Email))
             {
                 return Conflict(new { Message = "Este email já está a ser utilizado."});
@@ -82,23 +81,21 @@ namespace system_copsoq_api.Controllers
                 SetorAtuacao = dto.SetorAtuacao,
                 Cidade = dto.Cidade,
                 Cnpj = dto.Cnpj,
-                IsAtivo = true // Define como ativo por defeito
+                IsAtivo = true
             };
-            
-            _context.Empresas.Add(novaEmpresa);
-            await _context.SaveChangesAsync(); 
 
             var novoUsuario = new User
             {
                 Email = dto.Email,
                 Role = Role.Cliente,
-                EmpresaID = novaEmpresa.ID 
+                Empresa = novaEmpresa // 👈 RELACIONA DIRETO
             };
 
             novoUsuario.SenhaHash = _passwordHasher.HashPassword(novoUsuario, dto.Senha);
 
             _context.Usuarios.Add(novoUsuario);
-            await _context.SaveChangesAsync(); 
+
+            await _context.SaveChangesAsync(); // 👈 UMA ÚNICA VEZ
 
             return StatusCode(201, new { Message = "Cliente registrado com sucesso!" });
         }
