@@ -40,7 +40,7 @@ async function carregarEmpresas() {
     isLoading.value = false;
   }
 }
-//comentário
+//selecionar Empresa e carregar funcionários
 async function selecionarEmpresa(empresa: EmpresaSimplesDto) {
   selectedEmpresa.value = empresa;
   isLoading.value = true;
