@@ -22,7 +22,14 @@ const errorMessage = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
 
 const router = useRouter();
-const setores = ref(Object.values(SetorAtuacao));
+const setores = ref([
+  { id: 0, nome: 'Indústria' },
+  { id: 1, nome: 'Comércio' },
+  { id: 2, nome: 'Serviços' },
+  { id: 3, nome: 'Tecnologia' },
+  { id: 4, nome: 'Saúde' }
+  // Adicione os outros setores se houver
+]);
 
 // --- AÇÕES ---
 async function handleRegister() {
@@ -98,8 +105,9 @@ async function handleRegister() {
           <div class="form-group half">
             <label for="setor">Setor</label>
             <select id="setor" v-model="formData.setorAtuacao" required>
-              <option v-for="setor in setores" :key="setor" :value="setor">
-                {{ setor }}
+              <option value="" disabled>Selecione um setor...</option>
+              <option v-for="setor in setores" :key="setor.id" :value="setor.id">
+                {{ setor.nome }}
               </option>
             </select>
           </div>

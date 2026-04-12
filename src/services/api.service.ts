@@ -13,7 +13,7 @@ import type { DisparoHistoricoDto } from '../types/disparo.types';
 
 
 
-const API_BASE_URL = 'http://localhost:5258/api';
+const API_BASE_URL = 'https://e-segt-system-copsoq.onrender.com/api';
 
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('user-token'); 

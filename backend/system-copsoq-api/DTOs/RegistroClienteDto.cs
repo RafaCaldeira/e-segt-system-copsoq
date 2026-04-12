@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using system_copsoq_api.Models;
+using System.Text.Json.Serialization;
 
 namespace system_copsoq_api.DTOs
 {
@@ -21,6 +22,8 @@ namespace system_copsoq_api.DTOs
         [Required]
         public string NomeEmpresa { get; set; } = string.Empty;
         public string NomeResponsavel { get; set; } = string.Empty;
+
+        [JsonConverter(typeof(JsonStringEnumConverter))]
         public SetorAtuacao SetorAtuacao { get; set; }
         public string Cidade { get; set; } = string.Empty;
         public string Cnpj { get; set; } = string.Empty;
