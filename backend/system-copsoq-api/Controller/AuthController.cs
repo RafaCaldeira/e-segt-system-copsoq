@@ -66,38 +66,50 @@ namespace system_copsoq_api.Controllers
         [HttpPost("register-cliente")]
         public async Task<IActionResult> RegisterCliente([FromBody] RegistroClienteDto dto)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            if (await _context.Usuarios.AnyAsync(u => u.Email == dto.Email))
+            try
             {
-                return Conflict(new { Message = "Este email já está a ser utilizado."});
+                if (!ModelState.IsValid)
+                    return BadRequest(ModelState);
+
+                if (await _context.Usuarios.AnyAsync(u => u.Email == dto.Email))
+                {
+                    return Conflict(new { Message = "Este email já está a ser utilizado." });
+                }
+
+                var novaEmpresa = new Empresa
+                {
+                    NomeEmpresa = dto.NomeEmpresa,
+                    NomeResponsavel = dto.NomeResponsavel,
+                    SetorAtuacao = dto.SetorAtuacao,
+                    Cidade = dto.Cidade,
+                    Cnpj = dto.Cnpj,
+                    IsAtivo = true
+                };
+
+                var novoUsuario = new User
+                {
+                    Email = dto.Email,
+                    Role = Role.Cliente,
+                    Empresa = novaEmpresa
+                };
+
+                novoUsuario.SenhaHash = _passwordHasher.HashPassword(novoUsuario, dto.Senha);
+
+                _context.Usuarios.Add(novoUsuario);
+
+                await _context.SaveChangesAsync();
+
+                return StatusCode(201, new { Message = "Cliente registrado com sucesso!" });
             }
-
-            var novaEmpresa = new Empresa
+            catch (Exception ex)
             {
-                NomeEmpresa = dto.NomeEmpresa,
-                NomeResponsavel = dto.NomeResponsavel,
-                SetorAtuacao = dto.SetorAtuacao,
-                Cidade = dto.Cidade,
-                Cnpj = dto.Cnpj,
-                IsAtivo = true
-            };
-
-            var novoUsuario = new User
-            {
-                Email = dto.Email,
-                Role = Role.Cliente,
-                Empresa = novaEmpresa // 👈 RELACIONA DIRETO
-            };
-
-            novoUsuario.SenhaHash = _passwordHasher.HashPassword(novoUsuario, dto.Senha);
-
-            _context.Usuarios.Add(novoUsuario);
-
-            await _context.SaveChangesAsync(); // 👈 UMA ÚNICA VEZ
-
-            return StatusCode(201, new { Message = "Cliente registrado com sucesso!" });
+                return StatusCode(500, new
+                {
+                    Message = "Erro ao registrar cliente",
+                    Error = ex.Message,
+                    Inner = ex.InnerException?.Message
+                });
+            }
         }
         
         // POST: api/auth/login
