@@ -201,16 +201,6 @@ async function atualizarStatusDireto(acao: Acao, novoStatus: string) {
   }
 }
 
-
-function abrirModalConclusao(acao: Acao) {
-  acaoEmEdicao.value = acao;
-  formConclusao.value.justificativa = acao.justificativa || '';
-  // CORREÇÃO AQUI: Adicione "|| ''" no final
-  formConclusao.value.justificativa = acao.justificativa || ''; 
-  
-  showModalConclusao.value = true;
-}
-
 function fecharModal() {
   showModalConclusao.value = false;
   acaoEmEdicao.value = null;

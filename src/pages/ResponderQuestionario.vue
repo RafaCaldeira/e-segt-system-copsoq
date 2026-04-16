@@ -84,7 +84,7 @@ const opcoesRespostaDinamicas = computed<OpcaoRespostaDto[]>(() => {
 const totalPaginas = computed(() => (questionario.value?.dimensoes.length ?? 0) + 1);
 
 // --- FUNÇÃO AUXILIAR: Decidir se é Texto ou Likert ---
-function ehPerguntaTexto(pergunta: any): boolean {
+function ehPerguntaTexto(): boolean {
     // LÓGICA: Se a dimensão atual tiver "Qualitativa" ou "Aberta" no título,
     // OU se o questionário não tiver opções globais cadastradas.
     // Você pode ajustar isso conforme sua necessidade.
@@ -124,7 +124,7 @@ async function irParaProximaPagina() {
   if (dimensaoAtual.value) {
     for (const pergunta of dimensaoAtual.value.perguntas) {
         
-      if (ehPerguntaTexto(pergunta)) {
+      if (ehPerguntaTexto()) {
           // Validação para Texto: Se for obrigatório (ajuste se quiser opcional)
           // Se quiser obrigar escrever algo:
           /*
@@ -301,7 +301,7 @@ async function handleSubmit() {
               <div v-for="pergunta in dimensaoAtual.perguntas" :key="pergunta.id" class="pergunta-item">
                 <p>{{ pergunta.texto }}</p>
                 
-                <div v-if="ehPerguntaTexto(pergunta)" class="campo-texto">
+                <div v-if="ehPerguntaTexto()" class="campo-texto">
                     <textarea 
                         v-model="respostasTexto[pergunta.id]"
                         class="textarea-resposta"

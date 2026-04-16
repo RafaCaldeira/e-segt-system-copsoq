@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { useUserStore } from '../store/user';
 import { apiService } from '../services/api.service';
 import type { FuncionarioCreateDto } from '../types/funcionario.types';
 // 1. IMPORTAR COMPONENTES PADRÃO
@@ -9,7 +8,6 @@ import AppFooter from '../components/AppFooter.vue';
 import AppSidebar from '../components/AppSidebar.vue';
 
 const router = useRouter();
-const userStore = useUserStore();
 
 // --- ESTADO ---
 const form = ref<FuncionarioCreateDto>({

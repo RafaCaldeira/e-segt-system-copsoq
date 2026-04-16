@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref} from 'vue';
 import { apiService } from '../services/api.service';
 import { useRouter } from 'vue-router';
-import { useUserStore } from '../store/user';
 // 1. IMPORTAR COMPONENTES PADRÃO
 import AppSidebar from '../components/AppSidebar.vue';
 import AppFooter from '../components/AppFooter.vue';
@@ -36,7 +35,6 @@ interface DimensaoLocal {
 
 // --- CONFIG ---
 const router = useRouter();
-const userStore = useUserStore();
 
 // --- ESTADO ---
 const step = ref(1); 
